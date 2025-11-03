@@ -5,12 +5,15 @@ import subprocess
 import urllib.request
 import re
 import shutil
+import threading
+import time
 from pathlib import Path
 
 SCRIPT_VERSION = "2.0.0"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
-SCRIPT_URL = f"{GITHUB_RAW}/init_dashboard.py"
+SCRIPT_URL_V1 = f"{GITHUB_RAW}/init_dashboard.py"
+SCRIPT_URL_V2 = f"{GITHUB_RAW}/v2/init_dashboard.py"
 INSTALL_DIR = "/home/eero/dashboard"
 NETWORK_ID = "18073602"
 USER = "eero"
@@ -21,6 +24,7 @@ class Colors:
     YELLOW = '\033[1;33m'
     BLUE = '\033[0;34m'
     CYAN = '\033[0;36m'
+    MAGENTA = '\033[0;35m'
     NC = '\033[0m'
 
 def print_color(color, message):
@@ -61,37 +65,170 @@ def compare_versions(v1, v2):
             return -1
     return 0
 
+def get_major_version(version):
+    return int(version.split('.')[0])
+
+def input_with_timeout(prompt, timeout):
+    result = [None]
+    
+    def get_input():
+        try:
+            result[0] = input(prompt).strip().lower()
+        except:
+            pass
+    
+    print_color(Colors.MAGENTA, prompt)
+    thread = threading.Thread(target=get_input)
+    thread.daemon = True
+    thread.start()
+    
+    for i in range(timeout, 0, -1):
+        if not thread.is_alive():
+            break
+        print_color(Colors.YELLOW, f"  Defaulting to 'No' in {i} seconds...", end='\r')
+        time.sleep(1)
+    
+    if thread.is_alive():
+        print_color(Colors.YELLOW, "\n  Timeout reached. Staying on current version.        ")
+        return None
+    
+    print()
+    return result[0]
+
 def check_for_updates():
     print_header("Version Check")
-    print_info(f"Current Version: v{SCRIPT_VERSION}")
+    current_major = get_major_version(SCRIPT_VERSION)
+    print_info(f"Current Version: v{SCRIPT_VERSION} (v{current_major}.x)")
     print_info("Checking for updates from GitHub...")
+    
     try:
-        with urllib.request.urlopen(SCRIPT_URL, timeout=10) as response:
-            latest_script = response.read().decode('utf-8')
-        latest_version = extract_version_from_script(latest_script)
-        if not latest_version:
-            print_warning("Could not determine latest version. Continuing...")
-            return False
-        print_info(f"Latest Version: v{latest_version}")
-        comparison = compare_versions(latest_version, SCRIPT_VERSION)
-        if comparison == 0:
-            print_success("You are running the latest version!")
-            return False
-        elif comparison > 0:
-            print_warning(f"New version available: v{latest_version}")
-            print_info("Downloading and installing update...")
-            current_script = os.path.abspath(__file__)
-            backup_script = f"{current_script}.backup"
-            shutil.copy2(current_script, backup_script)
-            with open(current_script, 'w') as f:
-                f.write(latest_script)
-            os.chmod(current_script, 0o755)
-            print_success("Script updated successfully!")
-            print_info("Restarting with new version...")
-            os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
+        if current_major == 1:
+            print_info("You are running v1.x")
+            print_info("Checking for v1 updates...")
+            
+            try:
+                with urllib.request.urlopen(SCRIPT_URL_V1, timeout=10) as response:
+                    latest_v1_script = response.read().decode('utf-8')
+                latest_v1_version = extract_version_from_script(latest_v1_script)
+            except:
+                latest_v1_version = None
+                latest_v1_script = None
+            
+            try:
+                with urllib.request.urlopen(SCRIPT_URL_V2, timeout=10) as response:
+                    latest_v2_script = response.read().decode('utf-8')
+                latest_v2_version = extract_version_from_script(latest_v2_script)
+            except:
+                latest_v2_version = None
+                latest_v2_script = None
+            
+            if latest_v1_version:
+                print_info(f"Latest v1 Version: v{latest_v1_version}")
+                v1_comparison = compare_versions(latest_v1_version, SCRIPT_VERSION)
+                
+                if v1_comparison > 0:
+                    print_warning(f"New v1 version available: v{latest_v1_version}")
+            
+            if latest_v2_version:
+                print_color(Colors.MAGENTA, f"🚀 v2 Available: v{latest_v2_version}")
+                print_color(Colors.CYAN, "\nNew features in v2:")
+                print_color(Colors.GREEN, "  • Header with logo and action buttons")
+                print_color(Colors.GREEN, "  • Device details panel (names, IPs, signal strength)")
+                print_color(Colors.GREEN, "  • Integrated speed test functionality")
+                print_color(Colors.GREEN, "  • Enhanced UI with modals and animations")
+                print()
+                
+                response = input_with_timeout("Do you want to upgrade to v2? (yes/no) [Default: no]: ", 5)
+                
+                if response and response in ['yes', 'y']:
+                    print_success("Upgrading to v2...")
+                    current_script = os.path.abspath(__file__)
+                    backup_script = f"{current_script}.v1.backup"
+                    shutil.copy2(current_script, backup_script)
+                    print_success(f"v1 backed up to: {backup_script}")
+                    
+                    with open(current_script, 'w') as f:
+                        f.write(latest_v2_script)
+                    os.chmod(current_script, 0o755)
+                    print_success("Upgraded to v2 successfully!")
+                    print_info("Restarting with v2...")
+                    time.sleep(1)
+                    os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
+                else:
+                    print_info("Staying on v1...")
+                    if latest_v1_version and v1_comparison > 0:
+                        print_info(f"Updating to latest v1 version: v{latest_v1_version}")
+                        current_script = os.path.abspath(__file__)
+                        backup_script = f"{current_script}.backup"
+                        shutil.copy2(current_script, backup_script)
+                        
+                        with open(current_script, 'w') as f:
+                            f.write(latest_v1_script)
+                        os.chmod(current_script, 0o755)
+                        print_success("Updated to latest v1!")
+                        print_info("Restarting...")
+                        time.sleep(1)
+                        os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
+                    else:
+                        print_success("Already on latest v1 version!")
+                    return False
+            else:
+                print_warning("Could not check for v2 updates")
+                if latest_v1_version and v1_comparison > 0:
+                    print_info(f"Updating to latest v1: v{latest_v1_version}")
+                    current_script = os.path.abspath(__file__)
+                    backup_script = f"{current_script}.backup"
+                    shutil.copy2(current_script, backup_script)
+                    
+                    with open(current_script, 'w') as f:
+                        f.write(latest_v1_script)
+                    os.chmod(current_script, 0o755)
+                    print_success("Updated to latest v1!")
+                    print_info("Restarting...")
+                    time.sleep(1)
+                    os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
+        
+        elif current_major == 2:
+            print_info("You are running v2.x")
+            print_info("Checking for v2 updates...")
+            
+            with urllib.request.urlopen(SCRIPT_URL_V2, timeout=10) as response:
+                latest_v2_script = response.read().decode('utf-8')
+            
+            latest_v2_version = extract_version_from_script(latest_v2_script)
+            
+            if not latest_v2_version:
+                print_warning("Could not determine latest v2 version. Continuing...")
+                return False
+            
+            print_info(f"Latest v2 Version: v{latest_v2_version}")
+            comparison = compare_versions(latest_v2_version, SCRIPT_VERSION)
+            
+            if comparison == 0:
+                print_success("You are running the latest v2 version!")
+                return False
+            elif comparison > 0:
+                print_warning(f"New v2 version available: v{latest_v2_version}")
+                print_info("Downloading and installing update...")
+                current_script = os.path.abspath(__file__)
+                backup_script = f"{current_script}.backup"
+                shutil.copy2(current_script, backup_script)
+                
+                with open(current_script, 'w') as f:
+                    f.write(latest_v2_script)
+                os.chmod(current_script, 0o755)
+                print_success("Script updated successfully!")
+                print_info("Restarting with new version...")
+                time.sleep(1)
+                os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
+            else:
+                print_warning("You are running a newer version than available online")
+                return False
+        
         else:
-            print_warning("You are running a newer version than available online")
+            print_warning("Unknown version format. Continuing...")
             return False
+            
     except Exception as e:
         print_warning(f"Could not check for updates: {e}")
         print_info("Continuing with current version...")
@@ -1265,6 +1402,7 @@ def print_completion_message():
     print_color(Colors.GREEN, "  ✓ Device details panel (names, IPs, signal strength)")
     print_color(Colors.GREEN, "  ✓ Integrated speed test functionality")
     print_color(Colors.GREEN, "  ✓ Enhanced UI with modals and animations")
+    print_color(Colors.GREEN, "  ✓ Smart version upgrade system (v1 → v2)")
     print()
     print_info("Next steps:")
     print(f"  1. Place logo: sudo cp eero-logo.png {INSTALL_DIR}/frontend/assets/")
