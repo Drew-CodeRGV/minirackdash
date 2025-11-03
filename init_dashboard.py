@@ -7,7 +7,7 @@ import re
 import shutil
 from pathlib import Path
 
-SCRIPT_VERSION = "1.0.2"
+SCRIPT_VERSION = "1.1.0"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL = f"{GITHUB_RAW}/init_dashboard.py"
@@ -225,25 +225,31 @@ logging.basicConfig(filename='/home/eero/dashboard/logs/backend.log', level=logg
 
 NETWORK_ID = "{NETWORK_ID}"
 EERO_API_BASE = "https://api-user.e2ro.com/2.2"
-SESSION_COOKIE_FILE = "/home/eero/dashboard/.eero_session"
+TOKEN_FILE = "/home/eero/dashboard/.eero_token"
 
 class EeroAPI:
     def __init__(self):
         self.session = requests.Session()
-        self.session_cookie = self.load_session()
-    def load_session(self):
+        self.user_token = self.load_token()
+    
+    def load_token(self):
         try:
-            if os.path.exists(SESSION_COOKIE_FILE):
-                with open(SESSION_COOKIE_FILE, 'r') as f:
+            if os.path.exists(TOKEN_FILE):
+                with open(TOKEN_FILE, 'r') as f:
                     return f.read().strip()
         except Exception as e:
-            logging.error(f"Error loading session: {{e}}")
+            logging.error(f"Error loading token: {{e}}")
         return None
+    
     def get_headers(self):
-        headers = {{'Content-Type': 'application/json', 'User-Agent': 'Eero-Dashboard/1.0'}}
-        if self.session_cookie:
-            headers['Cookie'] = f's={{self.session_cookie}}'
+        headers = {{
+            'Content-Type': 'application/json',
+            'User-Agent': 'Eero-Dashboard/1.0'
+        }}
+        if self.user_token:
+            headers['X-User-Token'] = self.user_token
         return headers
+    
     def get_devices(self):
         try:
             url = f"{{EERO_API_BASE}}/networks/{{NETWORK_ID}}/devices"
@@ -253,6 +259,7 @@ class EeroAPI:
         except Exception as e:
             logging.error(f"Error fetching devices: {{e}}")
             return None
+    
     def get_bandwidth_usage(self):
         try:
             url = f"{{EERO_API_BASE}}/networks/{{NETWORK_ID}}/insights/usage"
@@ -497,36 +504,115 @@ def create_auth_helper():
     print_info("Creating authentication helper...")
     content = """#!/usr/bin/env python3
 import requests
+import os
+
+TOKEN_FILE = "/home/eero/dashboard/.eero_token"
 
 def authenticate_eero():
-    print("=" * 50)
+    print("=" * 60)
     print("Eero API Authentication Setup")
-    print("=" * 50)
+    print("=" * 60)
     print()
-    phone_or_email = input("Enter your Eero account (phone or email): ")
-    url = "https://api-user.e2ro.com/2.2/login"
-    payload = {"login": phone_or_email}
+    print("This uses the official eero API authentication flow.")
+    print("You'll need your API development email address.")
+    print()
+    
+    email = input("Enter your API development email address: ").strip()
+    
+    print()
+    print("Step 1: Generating unverified access token...")
+    
     try:
-        response = requests.post(url, json=payload)
+        # Step 1: Generate unverified token
+        login_url = "https://api-user.e2ro.com/2.2/pro/login"
+        login_payload = {"login": email}
+        
+        response = requests.post(login_url, json=login_payload, timeout=10)
         response.raise_for_status()
-        print("\\n✓ Verification code sent!")
-        code = input("Enter the verification code: ")
-        verify_url = "https://api-user.e2ro.com/2.3/login/verify"
+        
+        response_data = response.json()
+        
+        if 'data' not in response_data or 'user_token' not in response_data['data']:
+            print("✗ Error: Could not get user token from response")
+            print(f"Response: {response_data}")
+            return False
+        
+        unverified_token = response_data['data']['user_token']
+        print(f"✓ Unverified token received: {unverified_token[:20]}...")
+        print()
+        print("Step 2: Check your email for verification code")
+        print(f"An email has been sent to {email}")
+        print()
+        
+        # Step 2: Verify with code
+        code = input("Enter the verification code from your email: ").strip()
+        
+        print()
+        print("Step 3: Verifying access token...")
+        
+        verify_url = "https://api-user.e2ro.com/2.2/login/verify"
+        verify_headers = {"X-User-Token": unverified_token}
         verify_payload = {"code": code}
-        verify_response = requests.post(verify_url, json=verify_payload)
+        
+        verify_response = requests.post(
+            verify_url, 
+            headers=verify_headers, 
+            data=verify_payload,
+            timeout=10
+        )
         verify_response.raise_for_status()
-        session_cookie = verify_response.cookies.get('s')
-        if session_cookie:
-            with open('/home/eero/dashboard/.eero_session', 'w') as f:
-                f.write(session_cookie)
-            print("\\n✓ Authentication successful!")
+        
+        verify_data = verify_response.json()
+        
+        if 'data' in verify_data and verify_data['data'].get('email', {}).get('verified'):
+            print("✓ Email verified successfully!")
+            print()
+            
+            # Save the verified token
+            with open(TOKEN_FILE, 'w') as f:
+                f.write(unverified_token)
+            
+            # Set proper permissions
+            os.chmod(TOKEN_FILE, 0o600)
+            
+            print(f"✓ Token saved to {TOKEN_FILE}")
+            print()
+            print("=" * 60)
+            print("Authentication completed successfully!")
+            print("=" * 60)
+            print()
+            print("Next steps:")
+            print("  1. Restart the dashboard: sudo systemctl restart eero-dashboard")
+            print("  2. Access your dashboard at: http://localhost")
+            print()
+            return True
         else:
-            print("\\n✗ Failed to get session cookie.")
+            print(f"✗ Verification failed: {verify_data}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        print(f"✗ Network error: {e}")
+        return False
     except Exception as e:
-        print(f"\\n✗ Error: {e}")
+        print(f"✗ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+def main():
+    # Check if running as eero user
+    if os.geteuid() == 0:
+        print("⚠ Warning: This script should be run as the 'eero' user, not root")
+        print("Please run: sudo -u eero /home/eero/dashboard/venv/bin/python3 /home/eero/dashboard/setup_eero_auth.py")
+        print()
+        response = input("Continue anyway? (y/N): ").strip().lower()
+        if response != 'y':
+            return
+    
+    authenticate_eero()
 
 if __name__ == "__main__":
-    authenticate_eero()
+    main()
 """
     with open(f"{INSTALL_DIR}/setup_eero_auth.py", 'w') as f:
         f.write(content)
@@ -549,6 +635,8 @@ def print_completion_message():
     print(f"  1. Authenticate: sudo -u {USER} {INSTALL_DIR}/venv/bin/python3 {INSTALL_DIR}/setup_eero_auth.py")
     print(f"  2. Restart: sudo systemctl restart eero-dashboard")
     print(f"  3. Access: http://localhost")
+    print()
+    print_warning("Important: You need an API development email registered with eero")
     print()
 
 def main():
