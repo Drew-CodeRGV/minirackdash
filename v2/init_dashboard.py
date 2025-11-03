@@ -365,26 +365,29 @@ logging.basicConfig(filename='/home/eero/dashboard/logs/backend.log', level=logg
 
 NETWORK_ID = "{NETWORK_ID}"
 EERO_API_BASE = "https://api-user.e2ro.com/2.2"
-SESSION_COOKIE_FILE = "/home/eero/dashboard/.eero_session"
+API_TOKEN_FILE = "/home/eero/dashboard/.eero_token"
 
 class EeroAPI:
     def __init__(self):
         self.session = requests.Session()
-        self.session_cookie = self.load_session()
+        self.api_token = self.load_token()
     
-    def load_session(self):
+    def load_token(self):
         try:
-            if os.path.exists(SESSION_COOKIE_FILE):
-                with open(SESSION_COOKIE_FILE, 'r') as f:
+            if os.path.exists(API_TOKEN_FILE):
+                with open(API_TOKEN_FILE, 'r') as f:
                     return f.read().strip()
         except Exception as e:
-            logging.error(f"Error loading session: {{e}}")
+            logging.error(f"Error loading API token: {{e}}")
         return None
     
     def get_headers(self):
-        headers = {{'Content-Type': 'application/json', 'User-Agent': 'Eero-Dashboard/2.0'}}
-        if self.session_cookie:
-            headers['Cookie'] = f's={{self.session_cookie}}'
+        headers = {{
+            'Content-Type': 'application/json',
+            'User-Agent': 'Eero-Dashboard/2.0'
+        }}
+        if self.api_token:
+            headers['X-User-Token'] = self.api_token
         return headers
     
     def get_devices(self):
@@ -1349,31 +1352,75 @@ def create_auth_helper():
     print_info("Creating authentication helper...")
     content = """#!/usr/bin/env python3
 import requests
+import json
 
 def authenticate_eero():
-    print("=" * 50)
+    print("=" * 60)
     print("Eero API Authentication Setup")
-    print("=" * 50)
+    print("=" * 60)
     print()
-    phone_or_email = input("Enter your Eero account (phone or email): ")
-    url = "https://api-user.e2ro.com/2.2/login"
-    payload = {"login": phone_or_email}
+    print("This process follows the official eero API authentication flow:")
+    print("1. Generate unverified access token")
+    print("2. Verify token with email code")
+    print()
+    
+    email = input("Enter your API Development Email Address: ").strip()
+    
+    print("\\nStep 1: Generating unverified access token...")
+    login_payload = {"login": email}
+    
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post("https://api-user.e2ro.com/2.2/pro/login", json=login_payload)
         response.raise_for_status()
-        print("\\n✓ Verification code sent!")
-        code = input("Enter the verification code: ")
-        verify_url = "https://api-user.e2ro.com/2.3/login/verify"
-        verify_payload = {"code": code}
-        verify_response = requests.post(verify_url, json=verify_payload)
-        verify_response.raise_for_status()
-        session_cookie = verify_response.cookies.get('s')
-        if session_cookie:
-            with open('/home/eero/dashboard/.eero_session', 'w') as f:
-                f.write(session_cookie)
-            print("\\n✓ Authentication successful!")
+        
+        print(f"Response Status Code: {response.status_code}")
+        response_data = response.json()
+        
+        if 'data' in response_data and 'user_token' in response_data['data']:
+            unverified_token = response_data['data']['user_token']
+            print(f"\\n✓ Unverified Access Token Generated:")
+            print(f"  {unverified_token[:20]}...{unverified_token[-20:]}")
+            print("\\n✓ Verification code sent to your email!")
+            print(f"  Check the inbox of: {email}")
+            
+            code = input("\\nEnter the verification code from your email: ").strip()
+            
+            print("\\nStep 2: Verifying access token...")
+            verify_url = "https://api-user.e2ro.com/2.2/login/verify"
+            verify_payload = {"code": code}
+            verify_headers = {"X-User-Token": unverified_token}
+            
+            verify_response = requests.post(verify_url, headers=verify_headers, data=verify_payload)
+            verify_response.raise_for_status()
+            
+            verify_data = verify_response.json()
+            
+            if verify_data.get('data', {}).get('email', {}).get('verified'):
+                print("\\n✓ Account Verified? True")
+                print("\\n✓ Verified API Access Token:")
+                print(f"  {unverified_token[:20]}...{unverified_token[-20:]}")
+                
+                with open('/home/eero/dashboard/.eero_token', 'w') as f:
+                    f.write(unverified_token)
+                
+                print("\\n✓ Token saved to: /home/eero/dashboard/.eero_token")
+                print("\\n✓ Authentication successful!")
+                print("\\nYou can now restart the dashboard service:")
+                print("  sudo systemctl restart eero-dashboard")
+            else:
+                print("\\n✗ Account verification failed.")
+                print("Response:", json.dumps(verify_data, indent=2))
         else:
-            print("\\n✗ Failed to get session cookie.")
+            print("\\n✗ Failed to get user token from response.")
+            print("Response:", json.dumps(response_data, indent=2))
+    
+    except requests.exceptions.HTTPError as e:
+        print(f"\\n✗ HTTP Error: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                print("Response:", json.dumps(e.response.json(), indent=2))
+            except:
+                print("Response:", e.response.text)
     except Exception as e:
         print(f"\\n✗ Error: {e}")
 
@@ -1403,6 +1450,7 @@ def print_completion_message():
     print_color(Colors.GREEN, "  ✓ Integrated speed test functionality")
     print_color(Colors.GREEN, "  ✓ Enhanced UI with modals and animations")
     print_color(Colors.GREEN, "  ✓ Smart version upgrade system (v1 → v2)")
+    print_color(Colors.GREEN, "  ✓ Official eero API authentication flow")
     print()
     print_info("Next steps:")
     print(f"  1. Place logo: sudo cp eero-logo.png {INSTALL_DIR}/frontend/assets/")
@@ -1410,6 +1458,7 @@ def print_completion_message():
     print(f"  3. Restart: sudo systemctl restart eero-dashboard")
     print(f"  4. Access: http://localhost")
     print()
+    print_warning("⚠️  Important: Use your API Development Email for authentication!")
     print_warning("⚠️  Don't forget to add your eero logo image!")
 
 def main():
