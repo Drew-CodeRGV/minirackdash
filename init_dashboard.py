@@ -7,7 +7,7 @@ import re
 import shutil
 from pathlib import Path
 
-SCRIPT_VERSION = "1.1.0"
+SCRIPT_VERSION = "1.1.1"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL = f"{GITHUB_RAW}/init_dashboard.py"
@@ -335,110 +335,361 @@ def create_frontend():
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: linear-gradient(135deg, #001a33 0%, #003366 100%); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ffffff; overflow: hidden; height: 100vh; }
-        .version-badge { position: fixed; top: 10px; left: 10px; padding: 8px 15px; background: rgba(0, 0, 0, 0.5); border-radius: 20px; font-size: 12px; z-index: 1000; }
-        .dashboard-container { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 20px; padding: 20px; height: 100vh; padding-top: 50px; }
-        .chart-card { background: rgba(0, 40, 80, 0.7); border-radius: 15px; padding: 20px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); display: flex; flex-direction: column; }
-        .chart-title { font-size: 24px; font-weight: 600; margin-bottom: 15px; text-align: center; color: #4da6ff; text-transform: uppercase; letter-spacing: 1px; }
-        .chart-container { flex: 1; position: relative; min-height: 0; }
-        canvas { max-width: 100%; max-height: 100%; }
-        .status-indicator { position: fixed; top: 10px; right: 10px; padding: 8px 15px; background: rgba(0, 0, 0, 0.5); border-radius: 20px; font-size: 12px; display: flex; align-items: center; gap: 8px; z-index: 1000; }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #4CAF50; animation: pulse 2s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        body { 
+            background: linear-gradient(135deg, #001a33 0%, #003366 100%); 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            color: #ffffff; 
+            overflow: hidden; 
+            height: 400px;
+            width: 1280px;
+        }
+        .version-badge { 
+            position: fixed; 
+            top: 5px; 
+            left: 5px; 
+            padding: 4px 10px; 
+            background: rgba(0, 0, 0, 0.5); 
+            border-radius: 12px; 
+            font-size: 10px; 
+            z-index: 1000; 
+        }
+        .status-indicator { 
+            position: fixed; 
+            top: 5px; 
+            right: 5px; 
+            padding: 4px 10px; 
+            background: rgba(0, 0, 0, 0.5); 
+            border-radius: 12px; 
+            font-size: 10px; 
+            display: flex; 
+            align-items: center; 
+            gap: 6px; 
+            z-index: 1000; 
+        }
+        .status-dot { 
+            width: 8px; 
+            height: 8px; 
+            border-radius: 50%; 
+            background: #4CAF50; 
+            animation: pulse 2s infinite; 
+        }
+        @keyframes pulse { 
+            0%, 100% { opacity: 1; } 
+            50% { opacity: 0.5; } 
+        }
+        .dashboard-container { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr 1fr 1fr; 
+            grid-template-rows: 1fr; 
+            gap: 10px; 
+            padding: 10px; 
+            height: 400px; 
+            padding-top: 30px;
+            width: 1280px;
+        }
+        .chart-card { 
+            background: rgba(0, 40, 80, 0.7); 
+            border-radius: 10px; 
+            padding: 10px; 
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); 
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            display: flex; 
+            flex-direction: column;
+            min-width: 0;
+        }
+        .chart-title { 
+            font-size: 14px; 
+            font-weight: 600; 
+            margin-bottom: 8px; 
+            text-align: center; 
+            color: #4da6ff; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+        }
+        .chart-container { 
+            flex: 1; 
+            position: relative; 
+            min-height: 0;
+            min-width: 0;
+        }
+        canvas { 
+            max-width: 100%; 
+            max-height: 100%; 
+        }
     </style>
 </head>
 <body>
     <div class="version-badge"><span id="versionInfo">Loading...</span></div>
     <div class="status-indicator"><div class="status-dot"></div><span id="lastUpdate">Loading...</span></div>
     <div class="dashboard-container">
-        <div class="chart-card"><div class="chart-title">Connected Users</div><div class="chart-container"><canvas id="usersChart"></canvas></div></div>
-        <div class="chart-card"><div class="chart-title">WiFi Version Distribution</div><div class="chart-container"><canvas id="wifiChart"></canvas></div></div>
-        <div class="chart-card"><div class="chart-title">Download Bandwidth</div><div class="chart-container"><canvas id="downloadChart"></canvas></div></div>
-        <div class="chart-card"><div class="chart-title">Upload Bandwidth</div><div class="chart-container"><canvas id="uploadChart"></canvas></div></div>
+        <div class="chart-card">
+            <div class="chart-title">Connected Users</div>
+            <div class="chart-container"><canvas id="usersChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">WiFi Distribution</div>
+            <div class="chart-container"><canvas id="wifiChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Download (Mbps)</div>
+            <div class="chart-container"><canvas id="downloadChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Upload (Mbps)</div>
+            <div class="chart-container"><canvas id="uploadChart"></canvas></div>
+        </div>
     </div>
     <script>
         let charts = { users: null, wifi: null, download: null, upload: null };
         const chartColors = { primary: '#4da6ff', secondary: '#ff6b6b', success: '#51cf66', warning: '#ffd43b', info: '#74c0fc' };
-        const commonOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#ffffff', font: { size: 14 } } } }, scales: { y: { ticks: { color: '#ffffff' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }, x: { ticks: { color: '#ffffff' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } } } };
-        async function fetchVersion() { try { const response = await fetch('/api/version'); const data = await response.json(); document.getElementById('versionInfo').textContent = `v${data.version} - ${data.name}`; } catch (error) { console.error('Error fetching version:', error); } }
+        const commonOptions = { 
+            responsive: true, 
+            maintainAspectRatio: false, 
+            plugins: { 
+                legend: { 
+                    display: false
+                } 
+            }, 
+            scales: { 
+                y: { 
+                    ticks: { 
+                        color: '#ffffff',
+                        font: { size: 10 }
+                    }, 
+                    grid: { 
+                        color: 'rgba(255, 255, 255, 0.1)' 
+                    } 
+                }, 
+                x: { 
+                    ticks: { 
+                        color: '#ffffff',
+                        font: { size: 9 },
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 6
+                    }, 
+                    grid: { 
+                        color: 'rgba(255, 255, 255, 0.1)' 
+                    } 
+                } 
+            } 
+        };
+        
+        async function fetchVersion() { 
+            try { 
+                const response = await fetch('/api/version'); 
+                const data = await response.json(); 
+                document.getElementById('versionInfo').textContent = `v${data.version}`; 
+            } catch (error) { 
+                console.error('Error fetching version:', error); 
+            } 
+        }
+        
         function initCharts() {
             const usersCtx = document.getElementById('usersChart').getContext('2d');
-            charts.users = new Chart(usersCtx, { type: 'line', data: { labels: [], datasets: [{ label: 'Connected Users', data: [], borderColor: chartColors.primary, backgroundColor: 'rgba(77, 166, 255, 0.1)', tension: 0.4, fill: true, borderWidth: 3 }] }, options: commonOptions });
+            charts.users = new Chart(usersCtx, { 
+                type: 'line', 
+                data: { 
+                    labels: [], 
+                    datasets: [{ 
+                        label: 'Users', 
+                        data: [], 
+                        borderColor: chartColors.primary, 
+                        backgroundColor: 'rgba(77, 166, 255, 0.1)', 
+                        tension: 0.4, 
+                        fill: true, 
+                        borderWidth: 2,
+                        pointRadius: 2
+                    }] 
+                }, 
+                options: commonOptions 
+            });
+            
             const wifiCtx = document.getElementById('wifiChart').getContext('2d');
-            charts.wifi = new Chart(wifiCtx, { type: 'doughnut', data: { labels: [], datasets: [{ data: [], backgroundColor: [chartColors.primary, chartColors.success, chartColors.warning, chartColors.secondary, chartColors.info], borderWidth: 2, borderColor: '#001a33' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#ffffff', font: { size: 16 }, padding: 15 } } } } });
+            charts.wifi = new Chart(wifiCtx, { 
+                type: 'doughnut', 
+                data: { 
+                    labels: [], 
+                    datasets: [{ 
+                        data: [], 
+                        backgroundColor: [chartColors.primary, chartColors.success, chartColors.warning, chartColors.secondary, chartColors.info], 
+                        borderWidth: 2, 
+                        borderColor: '#001a33' 
+                    }] 
+                }, 
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { 
+                        legend: { 
+                            position: 'bottom', 
+                            labels: { 
+                                color: '#ffffff', 
+                                font: { size: 10 }, 
+                                padding: 5,
+                                boxWidth: 12
+                            } 
+                        } 
+                    } 
+                } 
+            });
+            
             const downloadCtx = document.getElementById('downloadChart').getContext('2d');
-            charts.download = new Chart(downloadCtx, { type: 'line', data: { labels: [], datasets: [{ label: 'Download (Mbps)', data: [], borderColor: chartColors.success, backgroundColor: 'rgba(81, 207, 102, 0.1)', tension: 0.4, fill: true, borderWidth: 3 }] }, options: commonOptions });
+            charts.download = new Chart(downloadCtx, { 
+                type: 'line', 
+                data: { 
+                    labels: [], 
+                    datasets: [{ 
+                        label: 'Download', 
+                        data: [], 
+                        borderColor: chartColors.success, 
+                        backgroundColor: 'rgba(81, 207, 102, 0.1)', 
+                        tension: 0.4, 
+                        fill: true, 
+                        borderWidth: 2,
+                        pointRadius: 2
+                    }] 
+                }, 
+                options: commonOptions 
+            });
+            
             const uploadCtx = document.getElementById('uploadChart').getContext('2d');
-            charts.upload = new Chart(uploadCtx, { type: 'line', data: { labels: [], datasets: [{ label: 'Upload (Mbps)', data: [], borderColor: chartColors.secondary, backgroundColor: 'rgba(255, 107, 107, 0.1)', tension: 0.4, fill: true, borderWidth: 3 }] }, options: commonOptions });
+            charts.upload = new Chart(uploadCtx, { 
+                type: 'line', 
+                data: { 
+                    labels: [], 
+                    datasets: [{ 
+                        label: 'Upload', 
+                        data: [], 
+                        borderColor: chartColors.secondary, 
+                        backgroundColor: 'rgba(255, 107, 107, 0.1)', 
+                        tension: 0.4, 
+                        fill: true, 
+                        borderWidth: 2,
+                        pointRadius: 2
+                    }] 
+                }, 
+                options: commonOptions 
+            });
         }
+        
         async function updateDashboard() {
             try {
                 const response = await fetch('/api/dashboard');
                 const data = await response.json();
-                const userLabels = data.connected_users.map(entry => { const date = new Date(entry.timestamp); return date.toLocaleTimeString(); });
+                
+                const userLabels = data.connected_users.map(entry => { 
+                    const date = new Date(entry.timestamp); 
+                    return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); 
+                });
                 const userCounts = data.connected_users.map(entry => entry.count);
                 charts.users.data.labels = userLabels;
                 charts.users.data.datasets[0].data = userCounts;
-                charts.users.update();
+                charts.users.update('none');
+                
                 const wifiLabels = Object.keys(data.wifi_versions);
                 const wifiData = Object.values(data.wifi_versions);
                 charts.wifi.data.labels = wifiLabels;
                 charts.wifi.data.datasets[0].data = wifiData;
-                charts.wifi.update();
-                const bandwidthLabels = data.bandwidth.map(entry => { const date = new Date(entry.timestamp); return date.toLocaleTimeString(); });
+                charts.wifi.update('none');
+                
+                const bandwidthLabels = data.bandwidth.map(entry => { 
+                    const date = new Date(entry.timestamp); 
+                    return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); 
+                });
                 const downloadData = data.bandwidth.map(entry => entry.download);
                 const uploadData = data.bandwidth.map(entry => entry.upload);
+                
                 charts.download.data.labels = bandwidthLabels;
                 charts.download.data.datasets[0].data = downloadData;
-                charts.download.update();
+                charts.download.update('none');
+                
                 charts.upload.data.labels = bandwidthLabels;
                 charts.upload.data.datasets[0].data = uploadData;
-                charts.upload.update();
+                charts.upload.update('none');
+                
                 const lastUpdate = new Date(data.last_update);
-                document.getElementById('lastUpdate').textContent = `Last updated: ${lastUpdate.toLocaleTimeString()}`;
-            } catch (error) { console.error('Error updating dashboard:', error); }
+                document.getElementById('lastUpdate').textContent = lastUpdate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            } catch (error) { 
+                console.error('Error updating dashboard:', error); 
+            }
         }
-        window.addEventListener('load', () => { fetchVersion(); initCharts(); updateDashboard(); setInterval(updateDashboard, 60000); });
+        
+        window.addEventListener('load', () => { 
+            fetchVersion(); 
+            initCharts(); 
+            updateDashboard(); 
+            setInterval(updateDashboard, 60000); 
+        });
     </script>
 </body>
 </html>"""
     with open(f"{INSTALL_DIR}/frontend/index.html", 'w') as f:
         f.write(content)
     run_command(f'chown {USER}:{USER} {INSTALL_DIR}/frontend/index.html')
+    run_command(f'chmod 644 {INSTALL_DIR}/frontend/index.html')
     print_success("Frontend dashboard created")
+    print_info(f"Verifying file exists: {INSTALL_DIR}/frontend/index.html")
+    if os.path.exists(f"{INSTALL_DIR}/frontend/index.html"):
+        print_success("index.html verified")
+    else:
+        print_error("index.html not found!")
 
 def configure_nginx():
     print_info("Configuring NGINX...")
-    content = """server {
+    content = f"""server {{
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
-    root /home/eero/dashboard/frontend;
+    
+    root {INSTALL_DIR}/frontend;
     index index.html;
-    location / { try_files $uri $uri/ =404; }
-    location /api/ {
+    
+    location / {{
+        try_files $uri $uri/ =404;
+    }}
+    
+    location /api/ {{
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    access_log /home/eero/dashboard/logs/nginx_access.log;
-    error_log /home/eero/dashboard/logs/nginx_error.log;
-}"""
+    }}
+    
+    access_log {INSTALL_DIR}/logs/nginx_access.log;
+    error_log {INSTALL_DIR}/logs/nginx_error.log;
+}}"""
     with open('/etc/nginx/sites-available/eero-dashboard', 'w') as f:
         f.write(content)
+    
+    # Remove default site
     if os.path.exists('/etc/nginx/sites-enabled/default'):
         os.remove('/etc/nginx/sites-enabled/default')
+        print_info("Removed default nginx site")
+    
+    # Remove old symlink if exists
     if os.path.exists('/etc/nginx/sites-enabled/eero-dashboard'):
         os.remove('/etc/nginx/sites-enabled/eero-dashboard')
+    
+    # Create new symlink
     os.symlink('/etc/nginx/sites-available/eero-dashboard', '/etc/nginx/sites-enabled/eero-dashboard')
-    if run_command('nginx -t'):
+    
+    print_info("Testing nginx configuration...")
+    if run_command('nginx -t', show_output=True):
+        print_success("NGINX configuration is valid")
         run_command('systemctl restart nginx')
         run_command('systemctl enable nginx')
-        print_success("NGINX configured")
+        print_success("NGINX configured and restarted")
+        
+        # Verify nginx is running
+        if run_command('systemctl is-active --quiet nginx'):
+            print_success("NGINX is running")
+        else:
+            print_error("NGINX failed to start")
+            run_command('systemctl status nginx', show_output=True)
     else:
-        print_error("NGINX configuration failed")
+        print_error("NGINX configuration test failed")
         sys.exit(1)
 
 def create_systemd_service():
@@ -464,7 +715,13 @@ WantedBy=multi-user.target
     run_command('systemctl daemon-reload')
     run_command('systemctl enable eero-dashboard.service')
     run_command('systemctl start eero-dashboard.service')
-    print_success("Systemd service created")
+    print_success("Systemd service created and started")
+    
+    # Verify service is running
+    if run_command('systemctl is-active --quiet eero-dashboard'):
+        print_success("Backend service is running")
+    else:
+        print_warning("Backend service may not be running (expected if not authenticated yet)")
 
 def create_kiosk_mode():
     print_info("Setting up kiosk mode...")
@@ -481,7 +738,7 @@ else
     echo "No chromium browser found"
     exit 1
 fi
-$BROWSER --kiosk --noerrdialogs --disable-infobars --no-first-run --fast --fast-start --disable-features=TranslateUI --disk-cache-dir=/dev/null --password-store=basic http://localhost
+$BROWSER --kiosk --noerrdialogs --disable-infobars --no-first-run --fast --fast-start --disable-features=TranslateUI --disk-cache-dir=/dev/null --password-store=basic --window-size=1280,400 --window-position=0,0 http://localhost
 """
     with open(f"{INSTALL_DIR}/start_kiosk.sh", 'w') as f:
         f.write(content)
@@ -498,7 +755,7 @@ X-GNOME-Autostart-enabled=true
     with open(f'{autostart_dir}/dashboard.desktop', 'w') as f:
         f.write(desktop_content)
     run_command(f'chown -R {USER}:{USER} /home/{USER}/.config')
-    print_success("Kiosk mode configured")
+    print_success("Kiosk mode configured for 1280x400 resolution")
 
 def create_auth_helper():
     print_info("Creating authentication helper...")
@@ -625,16 +882,25 @@ def setup_logs():
     for log_file in [f"{INSTALL_DIR}/logs/backend.log", f"{INSTALL_DIR}/logs/nginx_access.log", f"{INSTALL_DIR}/logs/nginx_error.log"]:
         Path(log_file).touch()
     run_command(f'chown -R {USER}:{USER} {INSTALL_DIR}/logs')
+    run_command(f'chmod 755 {INSTALL_DIR}/logs')
+    run_command(f'chmod 644 {INSTALL_DIR}/logs/*.log')
     print_success("Logs configured")
 
 def print_completion_message():
     print_header("Installation Complete!")
     print_success(f"Eero Dashboard v{SCRIPT_VERSION} installed")
     print()
+    print_info("Dashboard optimized for 1280x400 resolution")
+    print()
     print_info("Next steps:")
     print(f"  1. Authenticate: sudo -u {USER} {INSTALL_DIR}/venv/bin/python3 {INSTALL_DIR}/setup_eero_auth.py")
     print(f"  2. Restart: sudo systemctl restart eero-dashboard")
     print(f"  3. Access: http://localhost")
+    print()
+    print_info("Troubleshooting:")
+    print(f"  - Check nginx: sudo systemctl status nginx")
+    print(f"  - Check backend: sudo systemctl status eero-dashboard")
+    print(f"  - Check logs: tail -f {INSTALL_DIR}/logs/*.log")
     print()
     print_warning("Important: You need an API development email registered with eero")
     print()
