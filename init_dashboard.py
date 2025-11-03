@@ -7,7 +7,7 @@ import re
 import shutil
 from pathlib import Path
 
-SCRIPT_VERSION = "1.1.2"
+SCRIPT_VERSION = "1.1.3"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL = f"{GITHUB_RAW}/init_dashboard.py"
@@ -190,8 +190,78 @@ def create_directory_structure():
     print_info("Creating directory structure...")
     for directory in [f"{INSTALL_DIR}/backend", f"{INSTALL_DIR}/frontend", f"{INSTALL_DIR}/logs"]:
         Path(directory).mkdir(parents=True, exist_ok=True)
-    run_command(f'chown -R {USER}:{USER} /home/eero')
+    
     print_success("Directory structure created")
+
+def fix_permissions():
+    """Fix all permissions for nginx to access the files"""
+    print_info("Setting proper permissions for nginx access...")
+    
+    # The nginx user (www-data) needs execute permission on all parent directories
+    # to be able to traverse to the files
+    
+    # /home/eero must have execute permission for others
+    run_command('chmod 755 /home/eero')
+    print_info("Set /home/eero permissions: 755")
+    
+    # /home/eero/dashboard must have execute permission for others
+    run_command(f'chmod 755 {INSTALL_DIR}')
+    print_info(f"Set {INSTALL_DIR} permissions: 755")
+    
+    # /home/eero/dashboard/frontend must have execute permission for others
+    run_command(f'chmod 755 {INSTALL_DIR}/frontend')
+    print_info(f"Set {INSTALL_DIR}/frontend permissions: 755")
+    
+    # /home/eero/dashboard/backend must have execute permission for others
+    run_command(f'chmod 755 {INSTALL_DIR}/backend')
+    print_info(f"Set {INSTALL_DIR}/backend permissions: 755")
+    
+    # /home/eero/dashboard/logs must be writable by www-data
+    run_command(f'chmod 755 {INSTALL_DIR}/logs')
+    print_info(f"Set {INSTALL_DIR}/logs permissions: 755")
+    
+    # Files should be readable
+    run_command(f'chmod 644 {INSTALL_DIR}/frontend/index.html')
+    print_info(f"Set index.html permissions: 644")
+    
+    # Set ownership to eero user
+    run_command(f'chown -R {USER}:{USER} /home/{USER}')
+    print_info(f"Set ownership to {USER}:{USER}")
+    
+    # Verify permissions
+    print_info("Verifying permissions...")
+    
+    # Check each directory in the path
+    result = subprocess.run(['ls', '-ld', '/home/eero'], capture_output=True, text=True)
+    print(f"  /home/eero: {result.stdout.strip()}")
+    
+    result = subprocess.run(['ls', '-ld', INSTALL_DIR], capture_output=True, text=True)
+    print(f"  {INSTALL_DIR}: {result.stdout.strip()}")
+    
+    result = subprocess.run(['ls', '-ld', f'{INSTALL_DIR}/frontend'], capture_output=True, text=True)
+    print(f"  {INSTALL_DIR}/frontend: {result.stdout.strip()}")
+    
+    result = subprocess.run(['ls', '-la', f'{INSTALL_DIR}/frontend/index.html'], capture_output=True, text=True)
+    print(f"  index.html: {result.stdout.strip()}")
+    
+    # Test if www-data can access the file
+    test_result = subprocess.run(['sudo', '-u', 'www-data', 'test', '-r', f'{INSTALL_DIR}/frontend/index.html'], capture_output=True)
+    if test_result.returncode == 0:
+        print_success("✓ www-data can read index.html")
+    else:
+        print_error("✗ www-data CANNOT read index.html - there may still be permission issues")
+        return False
+    
+    # Test if www-data can list the directory
+    test_result = subprocess.run(['sudo', '-u', 'www-data', 'ls', f'{INSTALL_DIR}/frontend/'], capture_output=True, text=True)
+    if test_result.returncode == 0:
+        print_success(f"✓ www-data can list frontend directory: {test_result.stdout.strip()}")
+    else:
+        print_error("✗ www-data CANNOT list frontend directory")
+        return False
+    
+    print_success("All permissions verified successfully")
+    return True
 
 def setup_python_environment():
     print_info("Setting up Python virtual environment...")
@@ -629,9 +699,8 @@ def create_frontend():
     with open(frontend_path, 'w') as f:
         f.write(content)
     
-    # Set proper permissions
+    # Set proper permissions (will be fixed again in fix_permissions())
     os.chmod(frontend_path, 0o644)
-    run_command(f'chown {USER}:{USER} {frontend_path}')
     
     # Verify file was created
     if os.path.exists(frontend_path):
@@ -675,14 +744,7 @@ def configure_nginx():
     with open(nginx_config_path, 'w') as f:
         f.write(nginx_config)
     
-    print_info(f"NGINX config written to: {nginx_config_path}")
-    
-    # Show what was written
-    print_info("NGINX config content:")
-    with open(nginx_config_path, 'r') as f:
-        config_content = f.read()
-        for line in config_content.split('\n')[:10]:  # Show first 10 lines
-            print(f"  {line}")
+    print_success(f"NGINX config written to: {nginx_config_path}")
     
     # Remove default site
     if os.path.exists('/etc/nginx/sites-enabled/default'):
@@ -697,16 +759,9 @@ def configure_nginx():
     os.symlink(nginx_config_path, '/etc/nginx/sites-enabled/eero-dashboard')
     print_success("Created symlink to sites-enabled")
     
-    # Verify the symlink
-    if os.path.islink('/etc/nginx/sites-enabled/eero-dashboard'):
-        link_target = os.readlink('/etc/nginx/sites-enabled/eero-dashboard')
-        print_success(f"Symlink verified: -> {link_target}")
-    
     # Test nginx configuration
     print_info("Testing nginx configuration...")
     result = subprocess.run(['nginx', '-t'], capture_output=True, text=True)
-    print(result.stdout)
-    print(result.stderr)
     
     if result.returncode == 0:
         print_success("NGINX configuration is valid")
@@ -721,24 +776,13 @@ def configure_nginx():
         # Verify nginx is running
         if run_command('systemctl is-active --quiet nginx'):
             print_success("NGINX is running")
-            
-            # Test if we can access the index.html
-            print_info("Testing file access...")
-            test_result = subprocess.run(['sudo', '-u', 'www-data', 'test', '-r', f'{INSTALL_DIR}/frontend/index.html'], capture_output=True)
-            if test_result.returncode == 0:
-                print_success("www-data can read index.html")
-            else:
-                print_warning("www-data cannot read index.html - fixing permissions...")
-                run_command(f'chmod 755 {INSTALL_DIR}')
-                run_command(f'chmod 755 {INSTALL_DIR}/frontend')
-                run_command(f'chmod 644 {INSTALL_DIR}/frontend/index.html')
-                
         else:
             print_error("NGINX failed to start")
             run_command('systemctl status nginx', show_output=True)
             sys.exit(1)
     else:
         print_error("NGINX configuration test failed")
+        print(result.stderr)
         sys.exit(1)
 
 def create_systemd_service():
@@ -932,9 +976,8 @@ def setup_logs():
     print_info("Configuring logs...")
     for log_file in [f"{INSTALL_DIR}/logs/backend.log", f"{INSTALL_DIR}/logs/nginx_access.log", f"{INSTALL_DIR}/logs/nginx_error.log"]:
         Path(log_file).touch()
-    run_command(f'chown -R www-data:www-data {INSTALL_DIR}/logs')
+        run_command(f'chmod 644 {log_file}')
     run_command(f'chmod 755 {INSTALL_DIR}/logs')
-    run_command(f'chmod 644 {INSTALL_DIR}/logs/*.log')
     print_success("Logs configured")
 
 def print_completion_message():
@@ -943,10 +986,8 @@ def print_completion_message():
     print()
     print_info("Dashboard optimized for 1280x400 resolution")
     print()
-    print_info("Verification:")
-    print(f"  Frontend: ls -la {INSTALL_DIR}/frontend/index.html")
-    print(f"  NGINX config: cat /etc/nginx/sites-enabled/eero-dashboard | grep root")
-    print(f"  Test URL: curl -I http://localhost/")
+    print_info("Quick Test:")
+    print("  curl http://localhost/")
     print()
     print_info("Next steps:")
     print(f"  1. Authenticate: sudo -u {USER} {INSTALL_DIR}/venv/bin/python3 {INSTALL_DIR}/setup_eero_auth.py")
@@ -957,7 +998,7 @@ def print_completion_message():
     print(f"  - Check nginx: sudo systemctl status nginx")
     print(f"  - Check backend: sudo systemctl status eero-dashboard")
     print(f"  - Check nginx error: sudo tail -f {INSTALL_DIR}/logs/nginx_error.log")
-    print(f"  - Check permissions: sudo -u www-data test -r {INSTALL_DIR}/frontend/index.html && echo OK")
+    print(f"  - Test permissions: sudo -u www-data test -r {INSTALL_DIR}/frontend/index.html && echo OK")
     print()
     print_warning("Important: You need an API development email registered with eero")
     print()
@@ -979,6 +1020,7 @@ def main():
         setup_python_environment()
         create_backend_api()
         create_frontend()
+        fix_permissions()  # Fix permissions AFTER creating all files
         configure_nginx()
         create_systemd_service()
         create_kiosk_mode()
