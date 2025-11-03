@@ -7,7 +7,7 @@ import re
 import shutil
 from pathlib import Path
 
-SCRIPT_VERSION = "1.1.1"
+SCRIPT_VERSION = "1.1.2"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL = f"{GITHUB_RAW}/init_dashboard.py"
@@ -624,44 +624,65 @@ def create_frontend():
     </script>
 </body>
 </html>"""
-    with open(f"{INSTALL_DIR}/frontend/index.html", 'w') as f:
+    
+    frontend_path = f"{INSTALL_DIR}/frontend/index.html"
+    with open(frontend_path, 'w') as f:
         f.write(content)
-    run_command(f'chown {USER}:{USER} {INSTALL_DIR}/frontend/index.html')
-    run_command(f'chmod 644 {INSTALL_DIR}/frontend/index.html')
-    print_success("Frontend dashboard created")
-    print_info(f"Verifying file exists: {INSTALL_DIR}/frontend/index.html")
-    if os.path.exists(f"{INSTALL_DIR}/frontend/index.html"):
-        print_success("index.html verified")
+    
+    # Set proper permissions
+    os.chmod(frontend_path, 0o644)
+    run_command(f'chown {USER}:{USER} {frontend_path}')
+    
+    # Verify file was created
+    if os.path.exists(frontend_path):
+        file_size = os.path.getsize(frontend_path)
+        print_success(f"Frontend created: {frontend_path} ({file_size} bytes)")
     else:
-        print_error("index.html not found!")
+        print_error(f"Failed to create: {frontend_path}")
+        sys.exit(1)
 
 def configure_nginx():
     print_info("Configuring NGINX...")
-    content = f"""server {{
+    
+    # Create the nginx config with explicit string formatting
+    nginx_config = """server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
     
-    root {INSTALL_DIR}/frontend;
+    root /home/eero/dashboard/frontend;
     index index.html;
     
-    location / {{
+    location / {
         try_files $uri $uri/ =404;
-    }}
+    }
     
-    location /api/ {{
+    location /api/ {
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-    }}
+    }
     
-    access_log {INSTALL_DIR}/logs/nginx_access.log;
-    error_log {INSTALL_DIR}/logs/nginx_error.log;
-}}"""
-    with open('/etc/nginx/sites-available/eero-dashboard', 'w') as f:
-        f.write(content)
+    access_log /home/eero/dashboard/logs/nginx_access.log;
+    error_log /home/eero/dashboard/logs/nginx_error.log;
+}"""
+    
+    nginx_config_path = '/etc/nginx/sites-available/eero-dashboard'
+    
+    # Write the config
+    with open(nginx_config_path, 'w') as f:
+        f.write(nginx_config)
+    
+    print_info(f"NGINX config written to: {nginx_config_path}")
+    
+    # Show what was written
+    print_info("NGINX config content:")
+    with open(nginx_config_path, 'r') as f:
+        config_content = f.read()
+        for line in config_content.split('\n')[:10]:  # Show first 10 lines
+            print(f"  {line}")
     
     # Remove default site
     if os.path.exists('/etc/nginx/sites-enabled/default'):
@@ -673,21 +694,49 @@ def configure_nginx():
         os.remove('/etc/nginx/sites-enabled/eero-dashboard')
     
     # Create new symlink
-    os.symlink('/etc/nginx/sites-available/eero-dashboard', '/etc/nginx/sites-enabled/eero-dashboard')
+    os.symlink(nginx_config_path, '/etc/nginx/sites-enabled/eero-dashboard')
+    print_success("Created symlink to sites-enabled")
     
+    # Verify the symlink
+    if os.path.islink('/etc/nginx/sites-enabled/eero-dashboard'):
+        link_target = os.readlink('/etc/nginx/sites-enabled/eero-dashboard')
+        print_success(f"Symlink verified: -> {link_target}")
+    
+    # Test nginx configuration
     print_info("Testing nginx configuration...")
-    if run_command('nginx -t', show_output=True):
+    result = subprocess.run(['nginx', '-t'], capture_output=True, text=True)
+    print(result.stdout)
+    print(result.stderr)
+    
+    if result.returncode == 0:
         print_success("NGINX configuration is valid")
         run_command('systemctl restart nginx')
         run_command('systemctl enable nginx')
-        print_success("NGINX configured and restarted")
+        print_success("NGINX restarted")
+        
+        # Wait a moment for nginx to start
+        import time
+        time.sleep(2)
         
         # Verify nginx is running
         if run_command('systemctl is-active --quiet nginx'):
             print_success("NGINX is running")
+            
+            # Test if we can access the index.html
+            print_info("Testing file access...")
+            test_result = subprocess.run(['sudo', '-u', 'www-data', 'test', '-r', f'{INSTALL_DIR}/frontend/index.html'], capture_output=True)
+            if test_result.returncode == 0:
+                print_success("www-data can read index.html")
+            else:
+                print_warning("www-data cannot read index.html - fixing permissions...")
+                run_command(f'chmod 755 {INSTALL_DIR}')
+                run_command(f'chmod 755 {INSTALL_DIR}/frontend')
+                run_command(f'chmod 644 {INSTALL_DIR}/frontend/index.html')
+                
         else:
             print_error("NGINX failed to start")
             run_command('systemctl status nginx', show_output=True)
+            sys.exit(1)
     else:
         print_error("NGINX configuration test failed")
         sys.exit(1)
@@ -718,6 +767,8 @@ WantedBy=multi-user.target
     print_success("Systemd service created and started")
     
     # Verify service is running
+    import time
+    time.sleep(2)
     if run_command('systemctl is-active --quiet eero-dashboard'):
         print_success("Backend service is running")
     else:
@@ -881,7 +932,7 @@ def setup_logs():
     print_info("Configuring logs...")
     for log_file in [f"{INSTALL_DIR}/logs/backend.log", f"{INSTALL_DIR}/logs/nginx_access.log", f"{INSTALL_DIR}/logs/nginx_error.log"]:
         Path(log_file).touch()
-    run_command(f'chown -R {USER}:{USER} {INSTALL_DIR}/logs')
+    run_command(f'chown -R www-data:www-data {INSTALL_DIR}/logs')
     run_command(f'chmod 755 {INSTALL_DIR}/logs')
     run_command(f'chmod 644 {INSTALL_DIR}/logs/*.log')
     print_success("Logs configured")
@@ -892,6 +943,11 @@ def print_completion_message():
     print()
     print_info("Dashboard optimized for 1280x400 resolution")
     print()
+    print_info("Verification:")
+    print(f"  Frontend: ls -la {INSTALL_DIR}/frontend/index.html")
+    print(f"  NGINX config: cat /etc/nginx/sites-enabled/eero-dashboard | grep root")
+    print(f"  Test URL: curl -I http://localhost/")
+    print()
     print_info("Next steps:")
     print(f"  1. Authenticate: sudo -u {USER} {INSTALL_DIR}/venv/bin/python3 {INSTALL_DIR}/setup_eero_auth.py")
     print(f"  2. Restart: sudo systemctl restart eero-dashboard")
@@ -900,7 +956,8 @@ def print_completion_message():
     print_info("Troubleshooting:")
     print(f"  - Check nginx: sudo systemctl status nginx")
     print(f"  - Check backend: sudo systemctl status eero-dashboard")
-    print(f"  - Check logs: tail -f {INSTALL_DIR}/logs/*.log")
+    print(f"  - Check nginx error: sudo tail -f {INSTALL_DIR}/logs/nginx_error.log")
+    print(f"  - Check permissions: sudo -u www-data test -r {INSTALL_DIR}/frontend/index.html && echo OK")
     print()
     print_warning("Important: You need an API development email registered with eero")
     print()
