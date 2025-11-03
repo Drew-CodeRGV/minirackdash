@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "2.0.0"
+SCRIPT_VERSION = "2.0.1"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL_V1 = f"{GITHUB_RAW}/init_dashboard.py"
@@ -556,13 +556,13 @@ def create_frontend():
             background: linear-gradient(135deg, #001a33 0%, #003366 100%); 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             color: #ffffff; 
-            overflow-x: hidden;
+            overflow: hidden;
             height: 100vh;
         }
         
         .header {
             background: rgba(0, 20, 40, 0.9);
-            padding: 15px 30px;
+            padding: 8px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -573,37 +573,37 @@ def create_frontend():
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
         }
         
         .logo {
-            height: 40px;
+            height: 30px;
             width: auto;
         }
         
         .header-title {
-            font-size: 24px;
+            font-size: 18px;
             font-weight: 600;
             color: #4da6ff;
         }
         
         .header-actions {
             display: flex;
-            gap: 15px;
+            gap: 10px;
             align-items: center;
         }
         
         .header-btn {
-            padding: 10px 20px;
+            padding: 6px 12px;
             background: rgba(77, 166, 255, 0.2);
             border: 2px solid #4da6ff;
-            border-radius: 8px;
+            border-radius: 6px;
             color: #ffffff;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 14px;
+            gap: 6px;
+            font-size: 12px;
             transition: all 0.3s ease;
         }
         
@@ -624,22 +624,22 @@ def create_frontend():
         }
         
         .header-btn i {
-            font-size: 16px;
+            font-size: 14px;
         }
         
         .status-indicator {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 8px 15px;
+            gap: 6px;
+            padding: 6px 12px;
             background: rgba(0, 0, 0, 0.3);
-            border-radius: 20px;
-            font-size: 12px;
+            border-radius: 15px;
+            font-size: 11px;
         }
         
         .status-dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: #4CAF50;
             animation: pulse 2s infinite;
@@ -652,17 +652,17 @@ def create_frontend():
         
         .dashboard-container {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: 1fr 1fr;
-            gap: 20px;
-            padding: 20px;
-            height: calc(100vh - 80px);
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            grid-template-rows: 1fr;
+            gap: 10px;
+            padding: 10px;
+            height: calc(100vh - 60px);
         }
         
         .chart-card {
             background: rgba(0, 40, 80, 0.7);
-            border-radius: 15px;
-            padding: 20px;
+            border-radius: 10px;
+            padding: 10px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
@@ -670,13 +670,13 @@ def create_frontend():
         }
         
         .chart-title {
-            font-size: 20px;
+            font-size: 14px;
             font-weight: 600;
-            margin-bottom: 15px;
+            margin-bottom: 8px;
             text-align: center;
             color: #4da6ff;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
         
         .chart-container {
@@ -878,7 +878,7 @@ def create_frontend():
             </div>
         </div>
         <div class="chart-card">
-            <div class="chart-title">WiFi Version Distribution</div>
+            <div class="chart-title">WiFi Distribution</div>
             <div class="chart-container">
                 <canvas id="wifiChart"></canvas>
             </div>
@@ -954,17 +954,17 @@ def create_frontend():
                 legend: {
                     labels: {
                         color: '#ffffff',
-                        font: { size: 14 }
+                        font: { size: 10 }
                     }
                 }
             },
             scales: {
                 y: {
-                    ticks: { color: '#ffffff' },
+                    ticks: { color: '#ffffff', font: { size: 9 } },
                     grid: { color: 'rgba(255, 255, 255, 0.1)' }
                 },
                 x: {
-                    ticks: { color: '#ffffff' },
+                    ticks: { color: '#ffffff', font: { size: 9 } },
                     grid: { color: 'rgba(255, 255, 255, 0.1)' }
                 }
             }
@@ -983,7 +983,7 @@ def create_frontend():
                         backgroundColor: 'rgba(77, 166, 255, 0.1)',
                         tension: 0.4,
                         fill: true,
-                        borderWidth: 3
+                        borderWidth: 2
                     }]
                 },
                 options: commonOptions
@@ -1012,11 +1012,11 @@ def create_frontend():
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            position: 'right',
+                            position: 'bottom',
                             labels: {
                                 color: '#ffffff',
-                                font: { size: 16 },
-                                padding: 15
+                                font: { size: 10 },
+                                padding: 8
                             }
                         }
                     }
@@ -1035,7 +1035,7 @@ def create_frontend():
                         backgroundColor: 'rgba(81, 207, 102, 0.1)',
                         tension: 0.4,
                         fill: true,
-                        borderWidth: 3
+                        borderWidth: 2
                     }]
                 },
                 options: commonOptions
@@ -1053,7 +1053,7 @@ def create_frontend():
                         backgroundColor: 'rgba(255, 107, 107, 0.1)',
                         tension: 0.4,
                         fill: true,
-                        borderWidth: 3
+                        borderWidth: 2
                     }]
                 },
                 options: commonOptions
@@ -1445,6 +1445,8 @@ def print_completion_message():
     print_success(f"Eero Dashboard v{SCRIPT_VERSION} installed successfully!")
     print()
     print_color(Colors.CYAN, "🎉 New Features in v2:")
+    print_color(Colors.GREEN, "  ✓ Optimized for 1280x400 resolution")
+    print_color(Colors.GREEN, "  ✓ Single row layout with 4 widgets")
     print_color(Colors.GREEN, "  ✓ Header with logo and action buttons")
     print_color(Colors.GREEN, "  ✓ Device details panel (names, IPs, signal strength)")
     print_color(Colors.GREEN, "  ✓ Integrated speed test functionality")
