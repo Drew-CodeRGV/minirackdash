@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "2.0.5"
+SCRIPT_VERSION = "2.0.6"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL_V1 = f"{GITHUB_RAW}/init_dashboard.py"
@@ -438,9 +438,28 @@ def get_device_frequency(device):
     
     if frequency:
         freq_str = str(frequency).replace('.', '_')
-        return f"{{freq_str}} GHz"
+        if freq_str == '2_4':
+            return '2.4 GHz'
+        elif freq_str == '5' or freq_str == '5_0':
+            return '5 GHz'
+        elif freq_str == '6' or freq_str == '6_0':
+            return '6 GHz'
     
     return 'Unknown'
+
+def convert_signal_dbm_to_percent(signal_dbm_str):
+    try:
+        if not signal_dbm_str or signal_dbm_str == 'N/A':
+            return 0
+        signal_dbm = float(signal_dbm_str.replace(' dBm', '').strip())
+        if signal_dbm >= -50:
+            return 100
+        elif signal_dbm <= -100:
+            return 0
+        else:
+            return int(2 * (signal_dbm + 100))
+    except:
+        return 0
 
 eero_api = EeroAPI()
 data_cache = {{
@@ -458,9 +477,12 @@ def update_cache():
     global data_cache
     try:
         devices_data = eero_api.get_devices()
-        if devices_data:
-            connected = [d for d in devices_data.get('data', []) if d.get('connected')]
+        if devices_data and 'data' in devices_data:
+            all_devices = devices_data.get('data', [])
+            connected = [d for d in all_devices if d.get('connected', False)]
             current_time = datetime.now()
+            
+            logging.info(f"Found {{len(connected)}} connected devices out of {{len(all_devices)}} total")
             
             data_cache['connected_users'].append({{'timestamp': current_time.isoformat(), 'count': len(connected)}})
             two_hours_ago = current_time - timedelta(hours=2)
@@ -474,36 +496,40 @@ def update_cache():
                 device_types[device_type] += 1
                 
                 frequency = get_device_frequency(device)
-                if frequency == '2.4 GHz':
-                    frequency_dist['2.4 GHz'] += 1
-                elif frequency == '5 GHz':
-                    frequency_dist['5 GHz'] += 1
-                elif frequency == '6 GHz':
-                    frequency_dist['6 GHz'] += 1
+                if frequency in frequency_dist:
+                    frequency_dist[frequency] += 1
             
             data_cache['device_types'] = device_types
             data_cache['frequency_distribution'] = frequency_dist
             
+            logging.info(f"Device types: {{device_types}}")
+            logging.info(f"Frequency distribution: {{frequency_dist}}")
+            
             device_list = []
             for device in connected:
-                connection = device.get('connection', {{}})
+                connectivity = device.get('connectivity', {{}})
+                interface = device.get('interface', {{}})
+                
+                signal_avg_dbm = connectivity.get('signal_avg', 'N/A')
+                signal_percent = convert_signal_dbm_to_percent(signal_avg_dbm)
+                
                 device_info = {{
                     'name': device.get('nickname') or device.get('hostname', 'Unknown Device'),
-                    'ip': connection.get('ip', 'N/A'),
+                    'ip': ', '.join(device.get('ips', [])) if device.get('ips') else 'N/A',
                     'mac': device.get('mac', 'N/A'),
                     'manufacturer': device.get('manufacturer', 'Unknown'),
-                    'signal_strength': connection.get('signal_strength', 0),
-                    'signal_avg': connection.get('signal_avg', 0),
-                    'wifi_standard': connection.get('wifi_standard', 'Unknown'),
-                    'connected_at': device.get('connected', {{}}).get('last_changed', 'Unknown'),
+                    'signal_avg': signal_percent,
+                    'signal_avg_dbm': signal_avg_dbm,
                     'device_type': categorize_device_type(device),
                     'frequency': get_device_frequency(device)
                 }}
                 device_list.append(device_info)
             data_cache['devices'] = sorted(device_list, key=lambda x: x['name'].lower())
+            
+            logging.info(f"Processed {{len(device_list)}} devices for display")
         
         bandwidth_data = eero_api.get_bandwidth_usage()
-        if bandwidth_data:
+        if bandwidth_data and 'data' in bandwidth_data:
             current_time = datetime.now()
             usage = bandwidth_data.get('data', {{}})
             data_cache['bandwidth'].append({{
@@ -512,11 +538,15 @@ def update_cache():
             }})
             two_hours_ago = current_time - timedelta(hours=2)
             data_cache['bandwidth'] = [entry for entry in data_cache['bandwidth'] if datetime.fromisoformat(entry['timestamp']) > two_hours_ago]
+            
+            logging.info(f"Bandwidth: {{usage.get('download', 0) / 1024 / 1024:.2f}} Mbps download")
         
         data_cache['last_update'] = datetime.now().isoformat()
         logging.info("Cache updated successfully")
     except Exception as e:
         logging.error(f"Error updating cache: {{e}}")
+        import traceback
+        logging.error(traceback.format_exc())
 
 def run_speedtest():
     global data_cache
@@ -577,6 +607,7 @@ def get_version():
     return jsonify({{'version': '{SCRIPT_VERSION}', 'name': 'Eero Dashboard', 'repository': 'https://github.com/{GITHUB_REPO}'}})
 
 if __name__ == '__main__':
+    logging.info("Starting Eero Dashboard Backend")
     update_cache()
     app.run(host='127.0.0.1', port=5000, debug=False)
 """
@@ -1201,6 +1232,7 @@ def create_frontend():
                                 <div class="signal-fill ${getSignalClass(device.signal_avg)}" 
                                      style="width: ${device.signal_avg}%"></div>
                             </div>
+                            <small style="color: rgba(255,255,255,0.6);">${device.signal_avg_dbm}</small>
                         </td>
                     </tr>
                 `).join('');
@@ -1511,18 +1543,20 @@ def print_completion_message():
     print_header("Installation Complete!")
     print_success(f"Eero Dashboard v{SCRIPT_VERSION} installed successfully!")
     print()
-    print_color(Colors.CYAN, "🎉 What's New in v2.0.5:")
-    print_color(Colors.GREEN, "  ✓ Frequency Distribution pie chart (2.4/5/6 GHz)")
-    print_color(Colors.GREEN, "  ✓ Replaced channel utilization with client frequency breakdown")
-    print_color(Colors.GREEN, "  ✓ Shows count of devices on each WiFi band")
-    print_color(Colors.GREEN, "  ✓ Device table now includes frequency column")
-    print_color(Colors.GREEN, "  ✓ Real-time frequency tracking per device")
+    print_color(Colors.CYAN, "🎉 What's New in v2.0.6:")
+    print_color(Colors.GREEN, "  ✓ Fixed API data parsing (connectivity, interface)")
+    print_color(Colors.GREEN, "  ✓ Proper signal_avg from connectivity object")
+    print_color(Colors.GREEN, "  ✓ Better frequency detection (2.4/5/6 GHz)")
+    print_color(Colors.GREEN, "  ✓ Enhanced logging for troubleshooting")
+    print_color(Colors.GREEN, "  ✓ Updates every 60 seconds")
+    print_color(Colors.GREEN, "  ✓ Device details now show dBm values")
     print()
     print_info("Next steps:")
     print(f"  1. Place logo: sudo cp eero-logo.png {INSTALL_DIR}/frontend/assets/")
     print(f"  2. Authenticate: sudo -u {USER} {INSTALL_DIR}/venv/bin/python3 {INSTALL_DIR}/setup_eero_auth.py")
     print(f"  3. Restart: sudo systemctl restart eero-dashboard")
-    print(f"  4. Access: http://localhost")
+    print(f"  4. Check logs: tail -f {INSTALL_DIR}/logs/backend.log")
+    print(f"  5. Access: http://localhost")
     print()
     print_warning("⚠️  Important: Use your API Development Email for authentication!")
     print_warning("⚠️  Don't forget to add your eero logo image!")
