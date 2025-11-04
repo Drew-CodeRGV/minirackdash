@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 
-SCRIPT_VERSION = "2.0.6"
+SCRIPT_VERSION = "2.0.7"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL_V1 = f"{GITHUB_RAW}/init_dashboard.py"
@@ -411,41 +411,38 @@ class EeroAPI:
             logging.error(f"Error fetching bandwidth: {{e}}")
             return None
 
-def categorize_device_type(device):
+def categorize_device_os(device):
     manufacturer = device.get('manufacturer', '').lower()
-    hostname = device.get('hostname', '').lower()
-    nickname = device.get('nickname', '').lower() if device.get('nickname') else ''
-    device_type = device.get('device_type', '').lower()
     
-    apple_keywords = ['apple', 'iphone', 'ipad', 'ipod', 'macbook', 'imac', 'mac mini', 'apple watch', 'airpods']
-    android_keywords = ['android', 'samsung', 'google', 'pixel', 'oneplus', 'huawei', 'xiaomi', 'oppo', 'lg', 'motorola', 'sony']
-    
-    combined = f"{{manufacturer}} {{hostname}} {{nickname}} {{device_type}}"
+    apple_keywords = ['apple', 'inc']
+    android_keywords = ['samsung', 'google', 'huawei', 'xiaomi', 'oppo', 'lg', 'motorola', 'sony', 'oneplus']
+    windows_keywords = ['microsoft', 'dell', 'hp', 'lenovo', 'asus', 'acer']
     
     for keyword in apple_keywords:
-        if keyword in combined:
-            return 'iPhone'
+        if keyword in manufacturer:
+            return 'iOS'
     
     for keyword in android_keywords:
-        if keyword in combined:
+        if keyword in manufacturer:
             return 'Android'
+    
+    for keyword in windows_keywords:
+        if keyword in manufacturer:
+            return 'Windows'
     
     return 'Other'
 
-def get_device_frequency(device):
-    interface = device.get('interface', {{}})
-    frequency = interface.get('frequency', '')
-    
-    if frequency:
-        freq_str = str(frequency).replace('.', '_')
-        if freq_str == '2_4':
-            return '2.4 GHz'
-        elif freq_str == '5' or freq_str == '5_0':
-            return '5 GHz'
-        elif freq_str == '6' or freq_str == '6_0':
-            return '6 GHz'
-    
-    return 'Unknown'
+def get_signal_quality(score_bars):
+    if score_bars == 4:
+        return 'Excellent'
+    elif score_bars == 3:
+        return 'Good'
+    elif score_bars == 2:
+        return 'Fair'
+    elif score_bars == 1:
+        return 'Poor'
+    else:
+        return 'Unknown'
 
 def convert_signal_dbm_to_percent(signal_dbm_str):
     try:
@@ -464,8 +461,8 @@ def convert_signal_dbm_to_percent(signal_dbm_str):
 eero_api = EeroAPI()
 data_cache = {{
     'connected_users': [],
-    'device_types': {{}},
-    'frequency_distribution': {{}},
+    'device_os': {{}},
+    'signal_quality': {{}},
     'bandwidth': [],
     'devices': [],
     'last_update': None,
@@ -479,39 +476,52 @@ def update_cache():
         devices_data = eero_api.get_devices()
         if devices_data and 'data' in devices_data:
             all_devices = devices_data.get('data', [])
-            connected = [d for d in all_devices if d.get('connected', False)]
+            
+            wireless_connected = [
+                d for d in all_devices 
+                if d.get('connected', False) and d.get('connection_type', '').lower() == 'wireless'
+            ]
+            
             current_time = datetime.now()
             
-            logging.info(f"Found {{len(connected)}} connected devices out of {{len(all_devices)}} total")
+            logging.info(f"Total devices: {{len(all_devices)}}")
+            logging.info(f"Connected wireless devices: {{len(wireless_connected)}}")
             
-            data_cache['connected_users'].append({{'timestamp': current_time.isoformat(), 'count': len(connected)}})
+            data_cache['connected_users'].append({{'timestamp': current_time.isoformat(), 'count': len(wireless_connected)}})
             two_hours_ago = current_time - timedelta(hours=2)
             data_cache['connected_users'] = [entry for entry in data_cache['connected_users'] if datetime.fromisoformat(entry['timestamp']) > two_hours_ago]
             
-            device_types = {{'iPhone': 0, 'Android': 0, 'Other': 0}}
-            frequency_dist = {{'2.4 GHz': 0, '5 GHz': 0, '6 GHz': 0}}
+            device_os = {{'iOS': 0, 'Android': 0, 'Windows': 0, 'Other': 0}}
+            signal_quality = {{'Excellent': 0, 'Good': 0, 'Fair': 0, 'Poor': 0}}
             
-            for device in connected:
-                device_type = categorize_device_type(device)
-                device_types[device_type] += 1
+            for device in wireless_connected:
+                os_type = categorize_device_os(device)
+                device_os[os_type] = device_os.get(os_type, 0) + 1
                 
-                frequency = get_device_frequency(device)
-                if frequency in frequency_dist:
-                    frequency_dist[frequency] += 1
+                connectivity = device.get('connectivity', {{}})
+                score_bars = connectivity.get('score_bars', 0)
+                quality = get_signal_quality(score_bars)
+                if quality != 'Unknown':
+                    signal_quality[quality] += 1
             
-            data_cache['device_types'] = device_types
-            data_cache['frequency_distribution'] = frequency_dist
+            data_cache['device_os'] = device_os
+            data_cache['signal_quality'] = signal_quality
             
-            logging.info(f"Device types: {{device_types}}")
-            logging.info(f"Frequency distribution: {{frequency_dist}}")
+            logging.info(f"Device OS: {{device_os}}")
+            logging.info(f"Signal quality: {{signal_quality}}")
             
             device_list = []
-            for device in connected:
+            for device in wireless_connected:
                 connectivity = device.get('connectivity', {{}})
                 interface = device.get('interface', {{}})
                 
                 signal_avg_dbm = connectivity.get('signal_avg', 'N/A')
                 signal_percent = convert_signal_dbm_to_percent(signal_avg_dbm)
+                score_bars = connectivity.get('score_bars', 0)
+                
+                frequency = interface.get('frequency', 'N/A')
+                if frequency != 'N/A':
+                    frequency = f"{{frequency}} GHz"
                 
                 device_info = {{
                     'name': device.get('nickname') or device.get('hostname', 'Unknown Device'),
@@ -520,26 +530,30 @@ def update_cache():
                     'manufacturer': device.get('manufacturer', 'Unknown'),
                     'signal_avg': signal_percent,
                     'signal_avg_dbm': signal_avg_dbm,
-                    'device_type': categorize_device_type(device),
-                    'frequency': get_device_frequency(device)
+                    'score_bars': score_bars,
+                    'signal_quality': get_signal_quality(score_bars),
+                    'device_os': categorize_device_os(device),
+                    'frequency': frequency
                 }}
                 device_list.append(device_info)
+            
             data_cache['devices'] = sorted(device_list, key=lambda x: x['name'].lower())
             
-            logging.info(f"Processed {{len(device_list)}} devices for display")
+            logging.info(f"Processed {{len(device_list)}} wireless devices for display")
         
         bandwidth_data = eero_api.get_bandwidth_usage()
         if bandwidth_data and 'data' in bandwidth_data:
             current_time = datetime.now()
             usage = bandwidth_data.get('data', {{}})
+            download_mbps = usage.get('download', 0) / 1024 / 1024
             data_cache['bandwidth'].append({{
                 'timestamp': current_time.isoformat(),
-                'download': usage.get('download', 0) / 1024 / 1024
+                'download': download_mbps
             }})
             two_hours_ago = current_time - timedelta(hours=2)
             data_cache['bandwidth'] = [entry for entry in data_cache['bandwidth'] if datetime.fromisoformat(entry['timestamp']) > two_hours_ago]
             
-            logging.info(f"Bandwidth: {{usage.get('download', 0) / 1024 / 1024:.2f}} Mbps download")
+            logging.info(f"Bandwidth: {{download_mbps:.2f}} Mbps download")
         
         data_cache['last_update'] = datetime.now().isoformat()
         logging.info("Cache updated successfully")
@@ -607,7 +621,7 @@ def get_version():
     return jsonify({{'version': '{SCRIPT_VERSION}', 'name': 'Eero Dashboard', 'repository': 'https://github.com/{GITHUB_REPO}'}})
 
 if __name__ == '__main__':
-    logging.info("Starting Eero Dashboard Backend")
+    logging.info("Starting Eero Dashboard Backend v2.0.7")
     update_cache()
     app.run(host='127.0.0.1', port=5000, debug=False)
 """
@@ -955,9 +969,9 @@ def create_frontend():
             </div>
         </div>
         <div class="chart-card">
-            <div class="chart-title">Device Types</div>
+            <div class="chart-title">Device OS</div>
             <div class="chart-container">
-                <canvas id="deviceTypeChart"></canvas>
+                <canvas id="deviceOSChart"></canvas>
             </div>
         </div>
         <div class="chart-card">
@@ -967,9 +981,9 @@ def create_frontend():
             </div>
         </div>
         <div class="chart-card">
-            <div class="chart-title">Frequency Distribution</div>
+            <div class="chart-title">Signal Quality</div>
             <div class="chart-container">
-                <canvas id="frequencyChart"></canvas>
+                <canvas id="signalQualityChart"></canvas>
             </div>
         </div>
     </div>
@@ -977,7 +991,7 @@ def create_frontend():
     <div class="modal" id="deviceModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 class="modal-title">Connected Devices</h2>
+                <h2 class="modal-title">Connected Wireless Devices</h2>
                 <button class="close-btn" id="closeDeviceModal">&times;</button>
             </div>
             <div class="device-count" id="deviceCount">Loading...</div>
@@ -985,11 +999,11 @@ def create_frontend():
                 <thead>
                     <tr>
                         <th>Device Name</th>
-                        <th>Type</th>
+                        <th>OS</th>
                         <th>Frequency</th>
                         <th>IP Address</th>
                         <th>Manufacturer</th>
-                        <th>Signal Avg</th>
+                        <th>Signal Quality</th>
                     </tr>
                 </thead>
                 <tbody id="deviceTableBody">
@@ -1016,7 +1030,7 @@ def create_frontend():
     </div>
 
     <script>
-        let charts = { users: null, deviceType: null, download: null, frequency: null };
+        let charts = { users: null, deviceOS: null, download: null, signalQuality: null };
         const chartColors = {
             primary: '#4da6ff',
             secondary: '#ff6b6b',
@@ -1057,7 +1071,7 @@ def create_frontend():
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Connected Users',
+                        label: 'Connected Wireless',
                         data: [],
                         borderColor: chartColors.primary,
                         backgroundColor: 'rgba(77, 166, 255, 0.1)',
@@ -1069,16 +1083,17 @@ def create_frontend():
                 options: mainChartOptions
             });
 
-            const deviceTypeCtx = document.getElementById('deviceTypeChart').getContext('2d');
-            charts.deviceType = new Chart(deviceTypeCtx, {
+            const deviceOSCtx = document.getElementById('deviceOSChart').getContext('2d');
+            charts.deviceOS = new Chart(deviceOSCtx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['iPhone', 'Android', 'Other'],
+                    labels: ['iOS', 'Android', 'Windows', 'Other'],
                     datasets: [{
-                        data: [0, 0, 0],
+                        data: [0, 0, 0, 0],
                         backgroundColor: [
                             chartColors.primary,
                             chartColors.success,
+                            chartColors.info,
                             chartColors.warning
                         ],
                         borderWidth: 2,
@@ -1119,17 +1134,18 @@ def create_frontend():
                 options: mainChartOptions
             });
 
-            const frequencyCtx = document.getElementById('frequencyChart').getContext('2d');
-            charts.frequency = new Chart(frequencyCtx, {
+            const signalQualityCtx = document.getElementById('signalQualityChart').getContext('2d');
+            charts.signalQuality = new Chart(signalQualityCtx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['2.4 GHz', '5 GHz', '6 GHz'],
+                    labels: ['Excellent', 'Good', 'Fair', 'Poor'],
                     datasets: [{
-                        data: [0, 0, 0],
+                        data: [0, 0, 0, 0],
                         backgroundColor: [
-                            chartColors.orange,
+                            chartColors.success,
                             chartColors.info,
-                            chartColors.purple
+                            chartColors.warning,
+                            chartColors.secondary
                         ],
                         borderWidth: 2,
                         borderColor: '#001a33'
@@ -1157,6 +1173,8 @@ def create_frontend():
                 const response = await fetch('/api/dashboard');
                 const data = await response.json();
 
+                console.log('Dashboard data received:', data);
+
                 const userLabels = data.connected_users.map(entry => {
                     const date = new Date(entry.timestamp);
                     return date.toLocaleTimeString();
@@ -1166,13 +1184,15 @@ def create_frontend():
                 charts.users.data.datasets[0].data = userCounts;
                 charts.users.update();
 
-                const deviceTypes = data.device_types || { iPhone: 0, Android: 0, Other: 0 };
-                charts.deviceType.data.datasets[0].data = [
-                    deviceTypes.iPhone || 0,
-                    deviceTypes.Android || 0,
-                    deviceTypes.Other || 0
+                const deviceOS = data.device_os || { iOS: 0, Android: 0, Windows: 0, Other: 0 };
+                console.log('Device OS:', deviceOS);
+                charts.deviceOS.data.datasets[0].data = [
+                    deviceOS.iOS || 0,
+                    deviceOS.Android || 0,
+                    deviceOS.Windows || 0,
+                    deviceOS.Other || 0
                 ];
-                charts.deviceType.update();
+                charts.deviceOS.update();
 
                 const bandwidthLabels = data.bandwidth.map(entry => {
                     const date = new Date(entry.timestamp);
@@ -1184,13 +1204,15 @@ def create_frontend():
                 charts.download.data.datasets[0].data = downloadData;
                 charts.download.update();
 
-                const frequencyDist = data.frequency_distribution || { '2.4 GHz': 0, '5 GHz': 0, '6 GHz': 0 };
-                charts.frequency.data.datasets[0].data = [
-                    frequencyDist['2.4 GHz'] || 0,
-                    frequencyDist['5 GHz'] || 0,
-                    frequencyDist['6 GHz'] || 0
+                const signalQuality = data.signal_quality || { Excellent: 0, Good: 0, Fair: 0, Poor: 0 };
+                console.log('Signal quality:', signalQuality);
+                charts.signalQuality.data.datasets[0].data = [
+                    signalQuality.Excellent || 0,
+                    signalQuality.Good || 0,
+                    signalQuality.Fair || 0,
+                    signalQuality.Poor || 0
                 ];
-                charts.frequency.update();
+                charts.signalQuality.update();
 
                 const lastUpdate = new Date(data.last_update);
                 document.getElementById('lastUpdate').textContent = `Updated: ${lastUpdate.toLocaleTimeString()}`;
@@ -1212,27 +1234,31 @@ def create_frontend():
                 const response = await fetch('/api/devices');
                 const data = await response.json();
                 
-                document.getElementById('deviceCount').textContent = `Total Connected: ${data.count} devices`;
+                console.log('Devices data received:', data);
+                
+                document.getElementById('deviceCount').textContent = `Total Connected Wireless: ${data.count} devices`;
                 
                 const tbody = document.getElementById('deviceTableBody');
                 if (data.devices.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No devices connected</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No wireless devices connected</td></tr>';
                     return;
                 }
                 
                 tbody.innerHTML = data.devices.map(device => `
                     <tr>
                         <td><strong>${device.name}</strong></td>
-                        <td>${device.device_type}</td>
+                        <td>${device.device_os}</td>
                         <td>${device.frequency}</td>
                         <td>${device.ip}</td>
                         <td>${device.manufacturer}</td>
                         <td>
-                            <div class="signal-bar">
-                                <div class="signal-fill ${getSignalClass(device.signal_avg)}" 
-                                     style="width: ${device.signal_avg}%"></div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="signal-bar">
+                                    <div class="signal-fill ${getSignalClass(device.signal_avg)}" 
+                                         style="width: ${device.signal_avg}%"></div>
+                                </div>
+                                <small style="color: rgba(255,255,255,0.6);">${device.signal_quality} (${device.signal_avg_dbm})</small>
                             </div>
-                            <small style="color: rgba(255,255,255,0.6);">${device.signal_avg_dbm}</small>
                         </td>
                     </tr>
                 `).join('');
@@ -1487,7 +1513,7 @@ def authenticate_eero():
             print("\\nStep 2: Verifying access token...")
             verify_url = "https://api-user.e2ro.com/2.2/login/verify"
             verify_payload = {"code": code}
-            verify_headers = {"X-User-Token": unverified_token}
+            verify_headers = {"X-User-Token": [REDACTED:PASSWORD]fied_token}
             
             verify_response = requests.post(verify_url, headers=verify_headers, data=verify_payload)
             verify_response.raise_for_status()
@@ -1543,20 +1569,20 @@ def print_completion_message():
     print_header("Installation Complete!")
     print_success(f"Eero Dashboard v{SCRIPT_VERSION} installed successfully!")
     print()
-    print_color(Colors.CYAN, "🎉 What's New in v2.0.6:")
-    print_color(Colors.GREEN, "  ✓ Fixed API data parsing (connectivity, interface)")
-    print_color(Colors.GREEN, "  ✓ Proper signal_avg from connectivity object")
-    print_color(Colors.GREEN, "  ✓ Better frequency detection (2.4/5/6 GHz)")
-    print_color(Colors.GREEN, "  ✓ Enhanced logging for troubleshooting")
-    print_color(Colors.GREEN, "  ✓ Updates every 60 seconds")
-    print_color(Colors.GREEN, "  ✓ Device details now show dBm values")
+    print_color(Colors.CYAN, "🎉 What's New in v2.0.7:")
+    print_color(Colors.GREEN, "  ✓ Only wireless devices counted (excludes wired)")
+    print_color(Colors.GREEN, "  ✓ Device OS chart (iOS/Android/Windows/Other)")
+    print_color(Colors.GREEN, "  ✓ Signal Quality chart based on score_bars (4-bar system)")
+    print_color(Colors.GREEN, "  ✓ Enhanced logging and console debugging")
+    print_color(Colors.GREEN, "  ✓ Device table shows quality rating + dBm")
     print()
     print_info("Next steps:")
     print(f"  1. Place logo: sudo cp eero-logo.png {INSTALL_DIR}/frontend/assets/")
     print(f"  2. Authenticate: sudo -u {USER} {INSTALL_DIR}/venv/bin/python3 {INSTALL_DIR}/setup_eero_auth.py")
     print(f"  3. Restart: sudo systemctl restart eero-dashboard")
     print(f"  4. Check logs: tail -f {INSTALL_DIR}/logs/backend.log")
-    print(f"  5. Access: http://localhost")
+    print(f"  5. Check browser console for data debugging")
+    print(f"  6. Access: http://localhost")
     print()
     print_warning("⚠️  Important: Use your API Development Email for authentication!")
     print_warning("⚠️  Don't forget to add your eero logo image!")
