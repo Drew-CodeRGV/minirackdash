@@ -11,7 +11,7 @@ import json
 import requests
 from pathlib import Path
 
-SCRIPT_VERSION = "3.0.1"
+SCRIPT_VERSION = "3.0.2"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL_V1 = f"{GITHUB_RAW}/init_dashboard.py"
@@ -101,7 +101,7 @@ def save_config(config):
         return False
 
 def input_with_timeout(prompt, timeout, default=None):
-    """Get user input with timeout"""
+    """Get user input with timeout - only for yes/no questions with defaults"""
     result = [None]
     
     def get_input():
@@ -110,10 +110,7 @@ def input_with_timeout(prompt, timeout, default=None):
         except:
             pass
     
-    if default:
-        print_color(Colors.MAGENTA, f"{prompt} [Default: {default}]")
-    else:
-        print_color(Colors.MAGENTA, prompt)
+    print_color(Colors.MAGENTA, f"{prompt} [Default: {default}]")
     
     thread = threading.Thread(target=get_input)
     thread.daemon = True
@@ -122,45 +119,42 @@ def input_with_timeout(prompt, timeout, default=None):
     for i in range(timeout, 0, -1):
         if not thread.is_alive():
             break
-        if default:
-            print(f"{Colors.YELLOW}  Using default in {i} seconds...        {Colors.NC}", end='\r')
-        else:
-            print(f"{Colors.YELLOW}  Waiting for input... {i}s              {Colors.NC}", end='\r')
+        print(f"{Colors.YELLOW}  Using default in {i} seconds...        {Colors.NC}", end='\r')
         time.sleep(1)
     
     print()
     
     if thread.is_alive() or result[0] is None or result[0] == '':
-        if default:
-            print(f"{Colors.YELLOW}  Using default: {default}                    {Colors.NC}")
-            return default
-        else:
-            print(f"{Colors.YELLOW}  No input received                           {Colors.NC}")
-            return None
+        print(f"{Colors.YELLOW}  Using default: {default}                    {Colors.NC}")
+        return default
     
     return result[0]
 
 def prompt_network_id():
+    """Prompt user for Network ID"""
     print_header("Network Configuration")
     config = load_config()
     saved_network_id = config.get('network_id')
     
     if saved_network_id:
         print_info(f"Saved Network ID: {saved_network_id}")
-        print_info("Press Enter to use saved ID, or enter a new one:")
-    else:
-        print_info("No saved Network ID found. Please enter your Eero Network ID:")
-    
-    timeout = 5 if saved_network_id else 30
-    network_id = input_with_timeout("Network ID: ", timeout, default=saved_network_id)
-    
-    if not network_id:
-        if saved_network_id:
+        print_color(Colors.MAGENTA, "Press Enter to use saved ID, or enter a new one:")
+        print_color(Colors.CYAN, "Network ID: ")
+        network_id = input().strip()
+        
+        if not network_id:
             print_warning("Using saved Network ID")
             return saved_network_id
-        else:
+    else:
+        print_info("No saved Network ID found.")
+        print_info("Please enter your Eero Network ID:")
+        print_color(Colors.CYAN, "Network ID: ")
+        network_id = input().strip()
+        
+        while not network_id:
             print_error("Network ID is required!")
-            sys.exit(1)
+            print_color(Colors.CYAN, "Network ID: ")
+            network_id = input().strip()
     
     if not network_id.isdigit():
         print_error("Network ID must be numeric!")
@@ -173,6 +167,7 @@ def prompt_network_id():
     return network_id
 
 def authenticate_eero(network_id):
+    """Integrated Eero API authentication"""
     print_header("Eero API Authentication")
     
     if os.path.exists(TOKEN_FILE):
@@ -186,7 +181,8 @@ def authenticate_eero(network_id):
     print_info("You will receive a verification code via email")
     print()
     
-    email = input("Enter your Eero API email address: ").strip()
+    print_color(Colors.CYAN, "Enter your Eero API email address: ")
+    email = input().strip()
     
     if not email or '@' not in email:
         print_error("Invalid email address")
@@ -209,7 +205,8 @@ def authenticate_eero(network_id):
         print_info(f"Check your inbox: {email}")
         print()
         
-        code = input("Enter the verification code from your email: ").strip()
+        print_color(Colors.CYAN, "Enter the verification code from your email: ")
+        code = input().strip()
         
         if not code:
             print_error("Verification code is required")
@@ -339,12 +336,12 @@ def setup_python_environment():
     print_info("Installing Python packages...")
     run_command(f'sudo -u {USER} {venv_path}/bin/pip install --quiet flask flask-cors requests gunicorn speedtest-cli', timeout=300)
     print_success("Python environment ready")
-
 def create_backend_api(network_id):
     print_info("Creating backend API...")
     backend_code = f'''#!/usr/bin/env python3
 import os
 import sys
+import json
 import requests
 import speedtest
 import threading
@@ -368,14 +365,35 @@ logging.basicConfig(
 NETWORK_ID = "{network_id}"
 EERO_API_BASE = "https://api-user.e2ro.com/2.2"
 API_TOKEN_FILE = "/home/eero/dashboard/.eero_token"
+CONFIG_FILE = "/home/eero/dashboard/.config.json"
 GITHUB_REPO = "{GITHUB_REPO}"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{{GITHUB_REPO}}/main"
 SCRIPT_URL_V3 = f"{{GITHUB_RAW}}/v3/init_dashboard.py"
+
+def load_config():
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+    except:
+        pass
+    return {{}}
+
+def save_config(config):
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+        os.chmod(CONFIG_FILE, 0o600)
+        return True
+    except Exception as e:
+        logging.error(f"Could not save config: {{e}}")
+        return False
 
 class EeroAPI:
     def __init__(self):
         self.session = requests.Session()
         self.api_token = self.load_token()
+        self.network_id = self.load_network_id()
     
     def load_token(self):
         try:
@@ -388,6 +406,14 @@ class EeroAPI:
             logging.error(f"Error loading API token: {{e}}")
         return None
     
+    def load_network_id(self):
+        config = load_config()
+        return config.get('network_id', NETWORK_ID)
+    
+    def reload_network_id(self):
+        self.network_id = self.load_network_id()
+        logging.info(f"Reloaded Network ID: {{self.network_id}}")
+    
     def get_headers(self):
         headers = {{
             'Content-Type': 'application/json',
@@ -399,7 +425,7 @@ class EeroAPI:
     
     def get_all_devices(self):
         try:
-            url = f"{{EERO_API_BASE}}/networks/{{NETWORK_ID}}/devices"
+            url = f"{{EERO_API_BASE}}/networks/{{self.network_id}}/devices"
             response = self.session.get(url, headers=self.get_headers(), timeout=10)
             response.raise_for_status()
             devices_data = response.json()
@@ -655,7 +681,12 @@ def health_check():
 
 @app.route('/api/version')
 def get_version():
-    return jsonify({{'version': '3.0.1', 'name': 'Eero Dashboard', 'network_id': NETWORK_ID}})
+    config = load_config()
+    return jsonify({{
+        'version': '3.0.2',
+        'name': 'Eero Dashboard',
+        'network_id': config.get('network_id', eero_api.network_id)
+    }})
 
 @app.route('/api/admin/check-update')
 def check_update():
@@ -663,7 +694,7 @@ def check_update():
         with urllib.request.urlopen(SCRIPT_URL_V3, timeout=10) as response:
             latest_script = response.read().decode('utf-8')
         latest_version = extract_version_from_script(latest_script)
-        current_version = '3.0.1'
+        current_version = '3.0.2'
         if latest_version:
             update_available = compare_versions(latest_version, current_version) > 0
         else:
@@ -671,7 +702,7 @@ def check_update():
             update_available = False
         return jsonify({{'current_version': current_version, 'latest_version': latest_version, 'update_available': update_available}})
     except Exception as e:
-        return jsonify({{'current_version': '3.0.1', 'latest_version': '3.0.1', 'update_available': False, 'error': str(e)}})
+        return jsonify({{'current_version': '3.0.2', 'latest_version': '3.0.2', 'update_available': False, 'error': str(e)}})
 
 @app.route('/api/admin/update', methods=['POST'])
 def update_system():
@@ -679,7 +710,7 @@ def update_system():
         with urllib.request.urlopen(SCRIPT_URL_V3, timeout=10) as response:
             latest_script = response.read().decode('utf-8')
         latest_version = extract_version_from_script(latest_script)
-        if not latest_version or compare_versions(latest_version, '3.0.1') <= 0:
+        if not latest_version or compare_versions(latest_version, '3.0.2') <= 0:
             return jsonify({{'success': False, 'message': 'Already running latest version'}})
         script_path = '/root/init_dashboard.py'
         if not os.path.exists(script_path):
@@ -713,8 +744,35 @@ def reboot_system():
     except Exception as e:
         return jsonify({{'success': False, 'message': str(e)}}), 500
 
+@app.route('/api/admin/network-id', methods=['POST'])
+def change_network_id():
+    try:
+        data = request.get_json()
+        new_network_id = data.get('network_id', '').strip()
+        
+        if not new_network_id or not new_network_id.isdigit():
+            return jsonify({{'success': False, 'message': 'Invalid Network ID. Must be numeric.'}}), 400
+        
+        config = load_config()
+        config['network_id'] = new_network_id
+        config['last_updated'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        
+        if save_config(config):
+            eero_api.reload_network_id()
+            logging.info(f"Network ID changed to: {{new_network_id}}")
+            subprocess.Popen(['sudo', 'systemctl', 'restart', 'eero-dashboard'])
+            return jsonify({{
+                'success': True,
+                'message': f'Network ID updated to {{new_network_id}}. Service restarting...'
+            }})
+        else:
+            return jsonify({{'success': False, 'message': 'Failed to save configuration'}}), 500
+    except Exception as e:
+        logging.error(f"Error changing network ID: {{e}}")
+        return jsonify({{'success': False, 'message': str(e)}}), 500
+
 if __name__ == '__main__':
-    logging.info("Starting Eero Dashboard Backend v3.0.1")
+    logging.info("Starting Eero Dashboard Backend v3.0.2")
     update_cache()
     app.run(host='127.0.0.1', port=5000, debug=False)
 '''
@@ -730,11 +788,13 @@ def create_frontend():
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Eero Dashboard v3</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<style>*{margin:0;padding:0;box-sizing:border-box}body{background:linear-gradient(135deg,#001a33 0%,#003366 100%);font-family:'Segoe UI',sans-serif;color:#fff;overflow:hidden;height:100vh}.header{background:rgba(0,20,40,.9);padding:8px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid rgba(77,166,255,.3)}.logo-container{display:flex;align-items:center;gap:10px}.logo{height:30px}.header-title{font-size:18px;font-weight:600;color:#4da6ff}.header-actions{display:flex;gap:10px;align-items:center}.header-btn{padding:6px 12px;background:rgba(77,166,255,.2);border:2px solid #4da6ff;border-radius:6px;color:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;transition:all .3s}.header-btn:hover{background:rgba(77,166,255,.4);transform:translateY(-2px)}.header-btn:disabled{opacity:.5;cursor:not-allowed}.status-indicator{display:flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(0,0,0,.3);border-radius:15px;font-size:11px}.status-dot{width:8px;height:8px;border-radius:50%;background:#4CAF50;animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}.pi-icon{position:fixed;bottom:20px;right:20px;width:60px;height:60px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(102,126,234,.4);transition:all .3s;z-index:999;font-size:28px;font-weight:700;color:#fff;border:3px solid rgba(255,255,255,.3)}.pi-icon:hover{transform:scale(1.1) rotate(180deg)}.pixelate{filter:blur(5px)}.dashboard-container{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;padding:10px;height:calc(100vh - 60px);transition:filter .3s}.chart-card{background:rgba(0,40,80,.7);border-radius:10px;padding:10px;box-shadow:0 8px 32px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column}.chart-title{font-size:14px;font-weight:600;margin-bottom:8px;text-align:center;color:#4da6ff;text-transform:uppercase}.chart-subtitle{font-size:11px;text-align:center;color:rgba(255,255,255,.6);margin-bottom:8px}.chart-container{flex:1;position:relative;min-height:0}canvas{max-width:100%;max-height:100%}.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);z-index:1000;justify-content:center;align-items:center}.modal.active{display:flex}.modal-content{background:linear-gradient(135deg,#001a33 0%,#003366 100%);border-radius:15px;padding:30px;max-width:900px;width:90%;max-height:80vh;overflow-y:auto;border:2px solid rgba(77,166,255,.3)}.gibson-modal .modal-content{max-width:600px;background:linear-gradient(135deg,#0a0e27 0%,#1a1a2e 100%);border:2px solid #667eea}.gibson-title{font-size:32px;color:#667eea;text-align:center;margin-bottom:10px;font-weight:700;text-shadow:0 0 20px rgba(102,126,234,.5);letter-spacing:2px}.gibson-subtitle{text-align:center;color:rgba(255,255,255,.6);font-size:12px;margin-bottom:30px;font-style:italic}.version-info{background:rgba(0,0,0,.3);padding:20px;border-radius:10px;margin-bottom:20px;border:1px solid rgba(102,126,234,.3)}.version-row{display:flex;justify-content:space-between;margin-bottom:10px;font-size:14px}.version-label{color:#667eea;font-weight:600}.version-value{color:#fff;font-family:'Courier New',monospace}.version-status{text-align:center;padding:10px;border-radius:8px;margin-top:15px;font-weight:600}.version-status.up-to-date{background:rgba(76,175,80,.2);color:#4CAF50;border:1px solid #4CAF50}.version-status.update-available{background:rgba(255,193,7,.2);color:#ffc107;border:1px solid #ffc107}.version-status.checking{background:rgba(77,166,255,.2);color:#4da6ff;border:1px solid #4da6ff}.admin-actions{display:grid;gap:15px;margin-top:20px}.admin-btn{padding:15px 20px;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .3s}.admin-btn:hover{transform:translateY(-2px)}.admin-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}.admin-btn.update{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff}.admin-btn.restart{background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:#fff}.admin-btn.reboot{background:linear-gradient(135deg,#fa709a 0%,#fee140 100%);color:#1a1a2e}.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid rgba(77,166,255,.3)}.modal-title{font-size:24px;color:#4da6ff}.close-btn{background:0 0;border:none;color:#fff;font-size:28px;cursor:pointer}.close-btn:hover{color:#ff6b6b}.device-table{width:100%;border-collapse:collapse;margin-top:15px}.device-table th{background:rgba(77,166,255,.2);padding:12px;text-align:left;font-weight:600;color:#4da6ff;border-bottom:2px solid rgba(77,166,255,.3)}.device-table td{padding:12px;border-bottom:1px solid rgba(255,255,255,.1)}.device-table tr:hover{background:rgba(77,166,255,.1)}.signal-bar{width:100px;height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden}.signal-fill{height:100%;border-radius:4px}.signal-excellent{background:#4CAF50}.signal-good{background:#8BC34A}.signal-fair{background:#FFC107}.signal-poor{background:#FF9800}.signal-weak{background:#F44336}.speedtest-container{text-align:center;padding:20px}.speedtest-results{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:30px}.speedtest-metric{background:rgba(0,40,80,.5);padding:25px;border-radius:10px;border:1px solid rgba(77,166,255,.3)}.speedtest-metric-label{font-size:14px;color:#4da6ff;margin-bottom:10px}.speedtest-metric-value{font-size:36px;font-weight:600;color:#fff}.speedtest-metric-unit{font-size:14px;color:rgba(255,255,255,.7)}.spinner{border:4px solid rgba(77,166,255,.3);border-top:4px solid #4da6ff;border-radius:50%;width:50px;height:50px;animation:spin 1s linear infinite;margin:20px auto}@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}.device-count{font-size:16px;color:rgba(255,255,255,.8);margin-bottom:15px}.action-message{padding:15px;border-radius:8px;margin-top:15px;text-align:center;font-weight:600}.action-message.success{background:rgba(76,175,80,.2);color:#4CAF50;border:1px solid #4CAF50}.action-message.error{background:rgba(244,67,54,.2);color:#f44336;border:1px solid #f44336}.action-message.info{background:rgba(77,166,255,.2);color:#4da6ff;border:1px solid #4da6ff}</style></head><body>
-<div class="header"><div class="logo-container"><img src="/assets/eero-logo.png" alt="Eero" class="logo" onerror="this.style.display='none'"><div class="header-title">Network Dashboard v3.0.1</div></div><div class="header-actions"><div class="status-indicator"><div class="status-dot"></div><span id="lastUpdate">Loading...</span></div><button class="header-btn" id="deviceDetailsBtn"><i class="fas fa-list"></i><span>Devices</span></button><button class="header-btn" id="speedTestBtn"><i class="fas fa-gauge-high"></i><span>Speed Test</span></button></div></div>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:linear-gradient(135deg,#001a33 0%,#003366 100%);font-family:'Segoe UI',sans-serif;color:#fff;overflow:hidden;height:100vh}.header{background:rgba(0,20,40,.9);padding:8px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid rgba(77,166,255,.3)}.logo-container{display:flex;align-items:center;gap:10px}.logo{height:30px}.header-title{font-size:18px;font-weight:600;color:#4da6ff}.header-actions{display:flex;gap:10px;align-items:center}.header-btn{padding:6px 12px;background:rgba(77,166,255,.2);border:2px solid #4da6ff;border-radius:6px;color:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:12px;transition:all .3s}.header-btn:hover{background:rgba(77,166,255,.4);transform:translateY(-2px)}.header-btn:disabled{opacity:.5;cursor:not-allowed}.status-indicator{display:flex;align-items:center;gap:6px;padding:6px 12px;background:rgba(0,0,0,.3);border-radius:15px;font-size:11px}.status-dot{width:8px;height:8px;border-radius:50%;background:#4CAF50;animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}.pi-icon{position:fixed;bottom:20px;right:20px;width:30px;height:30px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(102,126,234,.4);transition:all .3s;z-index:999;font-size:16px;font-weight:700;color:#fff;border:2px solid rgba(255,255,255,.3)}.pi-icon:hover{transform:scale(1.1) rotate(180deg)}.pixelate-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:repeating-conic-gradient(rgba(0,0,0,.7) 0% 25%,rgba(0,0,0,.5) 0% 50%) 0 0/20px 20px;z-index:998;pointer-events:none;opacity:0;transition:opacity .3s ease}.pixelate-overlay.active{opacity:1}.dashboard-container{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;padding:10px;height:calc(100vh - 60px);transition:filter .3s ease}.chart-card{background:rgba(0,40,80,.7);border-radius:10px;padding:10px;box-shadow:0 8px 32px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column}.chart-title{font-size:14px;font-weight:600;margin-bottom:8px;text-align:center;color:#4da6ff;text-transform:uppercase}.chart-subtitle{font-size:11px;text-align:center;color:rgba(255,255,255,.6);margin-bottom:8px}.chart-container{flex:1;position:relative;min-height:0}canvas{max-width:100%;max-height:100%}.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);z-index:1000;justify-content:center;align-items:center}.modal.active{display:flex}.modal-content{background:linear-gradient(135deg,#001a33 0%,#003366 100%);border-radius:15px;padding:30px;max-width:900px;width:90%;max-height:80vh;overflow-y:auto;border:2px solid rgba(77,166,255,.3)}.gibson-modal .modal-content{max-width:600px;background:linear-gradient(135deg,#0a0e27 0%,#1a1a2e 100%);border:2px solid #667eea}.gibson-title{font-size:32px;color:#667eea;text-align:center;margin-bottom:10px;font-weight:700;text-shadow:0 0 20px rgba(102,126,234,.5);letter-spacing:2px}.gibson-subtitle{text-align:center;color:rgba(255,255,255,.6);font-size:12px;margin-bottom:30px;font-style:italic}.version-info{background:rgba(0,0,0,.3);padding:20px;border-radius:10px;margin-bottom:20px;border:1px solid rgba(102,126,234,.3)}.version-row{display:flex;justify-content:space-between;margin-bottom:10px;font-size:14px}.version-label{color:#667eea;font-weight:600}.version-value{color:#fff;font-family:'Courier New',monospace}.version-status{text-align:center;padding:10px;border-radius:8px;margin-top:15px;font-weight:600}.version-status.up-to-date{background:rgba(76,175,80,.2);color:#4CAF50;border:1px solid #4CAF50}.version-status.update-available{background:rgba(255,193,7,.2);color:#ffc107;border:1px solid #ffc107}.version-status.checking{background:rgba(77,166,255,.2);color:#4da6ff;border:1px solid #4da6ff}.admin-actions{display:grid;gap:15px;margin-top:20px}.admin-btn{padding:15px 20px;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .3s}.admin-btn:hover{transform:translateY(-2px)}.admin-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}.admin-btn.update{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff}.admin-btn.restart{background:linear-gradient(135deg,#f093fb 0%,#f5576c 100%);color:#fff}.admin-btn.reboot{background:linear-gradient(135deg,#fa709a 0%,#fee140 100%);color:#1a1a2e}.admin-btn.network{background:linear-gradient(135deg,#4facfe 0%,#00f2fe 100%);color:#fff}.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:15px;border-bottom:2px solid rgba(77,166,255,.3)}.modal-title{font-size:24px;color:#4da6ff}.close-btn{background:0 0;border:none;color:#fff;font-size:28px;cursor:pointer}.close-btn:hover{color:#ff6b6b}.device-table{width:100%;border-collapse:collapse;margin-top:15px}.device-table th{background:rgba(77,166,255,.2);padding:12px;text-align:left;font-weight:600;color:#4da6ff;border-bottom:2px solid rgba(77,166,255,.3)}.device-table td{padding:12px;border-bottom:1px solid rgba(255,255,255,.1)}.device-table tr:hover{background:rgba(77,166,255,.1)}.signal-bar{width:100px;height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden}.signal-fill{height:100%;border-radius:4px}.signal-excellent{background:#4CAF50}.signal-good{background:#8BC34A}.signal-fair{background:#FFC107}.signal-poor{background:#FF9800}.signal-weak{background:#F44336}.speedtest-container{text-align:center;padding:20px}.speedtest-results{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:30px}.speedtest-metric{background:rgba(0,40,80,.5);padding:25px;border-radius:10px;border:1px solid rgba(77,166,255,.3)}.speedtest-metric-label{font-size:14px;color:#4da6ff;margin-bottom:10px}.speedtest-metric-value{font-size:36px;font-weight:600;color:#fff}.speedtest-metric-unit{font-size:14px;color:rgba(255,255,255,.7)}.spinner{border:4px solid rgba(77,166,255,.3);border-top:4px solid #4da6ff;border-radius:50%;width:50px;height:50px;animation:spin 1s linear infinite;margin:20px auto}@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}.device-count{font-size:16px;color:rgba(255,255,255,.8);margin-bottom:15px}.action-message{padding:15px;border-radius:8px;margin-top:15px;text-align:center;font-weight:600}.action-message.success{background:rgba(76,175,80,.2);color:#4CAF50;border:1px solid #4CAF50}.action-message.error{background:rgba(244,67,54,.2);color:#f44336;border:1px solid #f44336}.action-message.info{background:rgba(77,166,255,.2);color:#4da6ff;border:1px solid #4da6ff}.input-group{margin:20px 0}.input-group label{display:block;color:#667eea;font-weight:600;margin-bottom:10px;font-size:14px}.input-group input{width:100%;padding:12px;background:rgba(0,0,0,.3);border:2px solid rgba(102,126,234,.3);border-radius:8px;color:#fff;font-size:16px;font-family:'Courier New',monospace}.input-group input:focus{outline:none;border-color:#667eea}</style></head><body>
+<div class="pixelate-overlay" id="pixelateOverlay"></div>
+<div class="header"><div class="logo-container"><img src="/assets/eero-logo.png" alt="Eero" class="logo" onerror="this.style.display='none'"><div class="header-title">Network Dashboard v3.0.2</div></div><div class="header-actions"><div class="status-indicator"><div class="status-dot"></div><span id="lastUpdate">Loading...</span></div><button class="header-btn" id="deviceDetailsBtn"><i class="fas fa-list"></i><span>Devices</span></button><button class="header-btn" id="speedTestBtn"><i class="fas fa-gauge-high"></i><span>Speed Test</span></button></div></div>
 <div class="dashboard-container" id="dashboardContainer"><div class="chart-card"><div class="chart-title">Connected Users</div><div class="chart-subtitle">Wireless devices over time</div><div class="chart-container"><canvas id="usersChart"></canvas></div></div><div class="chart-card"><div class="chart-title">Device OS</div><div class="chart-subtitle" id="deviceOsSubtitle">Loading...</div><div class="chart-container"><canvas id="deviceOSChart"></canvas></div></div><div class="chart-card"><div class="chart-title">Frequency Distribution</div><div class="chart-subtitle" id="frequencySubtitle">Loading...</div><div class="chart-container"><canvas id="frequencyChart"></canvas></div></div><div class="chart-card"><div class="chart-title">Average Signal Strength</div><div class="chart-subtitle">Network-wide average (dBm)</div><div class="chart-container"><canvas id="signalStrengthChart"></canvas></div></div></div>
 <div class="pi-icon" id="piIcon" title="System Admin">π</div>
-<div class="modal gibson-modal" id="gibsonModal"><div class="modal-content"><div class="modal-header"><h2 class="gibson-title">THE GIBSON</h2><button class="close-btn" id="closeGibsonModal">&times;</button></div><div class="gibson-subtitle">"Hack the Planet!"</div><div class="version-info"><div class="version-row"><span class="version-label">Current Version:</span><span class="version-value" id="currentVersion">Loading...</span></div><div class="version-row"><span class="version-label">Latest Version:</span><span class="version-value" id="latestVersion">Checking...</span></div><div class="version-row"><span class="version-label">Network ID:</span><span class="version-value" id="networkId">Loading...</span></div><div class="version-status checking" id="versionStatus"><i class="fas fa-spinner fa-spin"></i> Checking for updates...</div></div><div class="admin-actions"><button class="admin-btn update" id="updateBtn" disabled><i class="fas fa-download"></i><span>Update to Latest Version</span></button><button class="admin-btn restart" id="restartBtn"><i class="fas fa-rotate-right"></i><span>Restart Dashboard Service</span></button><button class="admin-btn reboot" id="rebootBtn"><i class="fas fa-power-off"></i><span>Reboot System</span></button></div><div id="actionMessage"></div></div></div>
+<div class="modal gibson-modal" id="gibsonModal"><div class="modal-content"><div class="modal-header"><h2 class="gibson-title">THE GIBSON</h2><button class="close-btn" id="closeGibsonModal">&times;</button></div><div class="gibson-subtitle">"Hack the Planet!"</div><div class="version-info"><div class="version-row"><span class="version-label">Current Version:</span><span class="version-value" id="currentVersion">Loading...</span></div><div class="version-row"><span class="version-label">Latest Version:</span><span class="version-value" id="latestVersion">Checking...</span></div><div class="version-row"><span class="version-label">Network ID:</span><span class="version-value" id="networkId">Loading...</span></div><div class="version-status checking" id="versionStatus"><i class="fas fa-spinner fa-spin"></i> Checking for updates...</div></div><div class="admin-actions"><button class="admin-btn update" id="updateBtn" disabled><i class="fas fa-download"></i><span>Update to Latest Version</span></button><button class="admin-btn network" id="changeNetworkBtn"><i class="fas fa-network-wired"></i><span>Change Network ID</span></button><button class="admin-btn restart" id="restartBtn"><i class="fas fa-rotate-right"></i><span>Restart Dashboard Service</span></button><button class="admin-btn reboot" id="rebootBtn"><i class="fas fa-power-off"></i><span>Reboot System</span></button></div><div id="actionMessage"></div></div></div>
+<div class="modal" id="networkIdModal"><div class="modal-content" style="max-width:500px"><div class="modal-header"><h2 class="modal-title">Change Network ID</h2><button class="close-btn" id="closeNetworkIdModal">&times;</button></div><div class="input-group"><label for="newNetworkId">Enter New Eero Network ID:</label><input type="text" id="newNetworkId" placeholder="e.g., 18073602" /></div><button class="admin-btn network" id="saveNetworkBtn" style="width:100%;margin-top:20px"><i class="fas fa-save"></i><span>Save & Restart Service</span></button><div id="networkMessage"></div></div></div>
 <div class="modal" id="deviceModal"><div class="modal-content"><div class="modal-header"><h2 class="modal-title">Connected Wireless Devices</h2><button class="close-btn" id="closeDeviceModal">&times;</button></div><div class="device-count" id="deviceCount">Loading...</div><table class="device-table"><thead><tr><th>Device Name</th><th>OS</th><th>Frequency</th><th>IP Address</th><th>Manufacturer</th><th>Signal Quality</th></tr></thead><tbody id="deviceTableBody"><tr><td colspan="6" style="text-align:center">Loading devices...</td></tr></tbody></table></div></div>
 <div class="modal" id="speedTestModal"><div class="modal-content"><div class="modal-header"><h2 class="modal-title">Internet Speed Test</h2><button class="close-btn" id="closeSpeedTestModal">&times;</button></div><div class="speedtest-container" id="speedTestContainer"><p>Click "Run Test" to measure your internet speed</p><button class="header-btn" id="runSpeedTest" style="margin:20px auto"><i class="fas fa-play"></i><span>Run Test</span></button></div></div></div>
 <script>
@@ -748,7 +808,9 @@ async function checkVersion(){try{const response=await fetch('/api/version');con
 async function updateSystem(){const btn=document.getElementById('updateBtn');const messageDiv=document.getElementById('actionMessage');btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i><span>Updating...</span>';messageDiv.className='action-message info';messageDiv.innerHTML='<i class="fas fa-info-circle"></i> Starting update process...';try{const response=await fetch('/api/admin/update',{method:'POST'});const data=await response.json();if(data.success){messageDiv.className='action-message success';messageDiv.innerHTML='<i class="fas fa-check-circle"></i> '+data.message;setTimeout(()=>{messageDiv.innerHTML+='<br>Reloading dashboard in 5 seconds...';setTimeout(()=>location.reload(),5000);},2000);}else{messageDiv.className='action-message error';messageDiv.innerHTML='<i class="fas fa-times-circle"></i> '+data.message;btn.disabled=false;btn.innerHTML='<i class="fas fa-download"></i><span>Update to Latest Version</span>';}}catch(error){messageDiv.className='action-message error';messageDiv.innerHTML='<i class="fas fa-times-circle"></i> Update failed: '+error.message;btn.disabled=false;btn.innerHTML='<i class="fas fa-download"></i><span>Update to Latest Version</span>';}}
 async function restartService(){if(!confirm('Restart the dashboard service? This will take about 10 seconds.'))return;const btn=document.getElementById('restartBtn');const messageDiv=document.getElementById('actionMessage');btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i><span>Restarting...</span>';messageDiv.className='action-message info';messageDiv.innerHTML='<i class="fas fa-info-circle"></i> Restarting dashboard service...';try{const response=await fetch('/api/admin/restart',{method:'POST'});const data=await response.json();if(data.success){messageDiv.className='action-message success';messageDiv.innerHTML='<i class="fas fa-check-circle"></i> Service restarted successfully!';setTimeout(()=>{messageDiv.innerHTML+='<br>Reloading dashboard in 3 seconds...';setTimeout(()=>location.reload(),3000);},2000);}else{messageDiv.className='action-message error';messageDiv.innerHTML='<i class="fas fa-times-circle"></i> '+data.message;btn.disabled=false;btn.innerHTML='<i class="fas fa-rotate-right"></i><span>Restart Dashboard Service</span>';}}catch(error){messageDiv.className='action-message error';messageDiv.innerHTML='<i class="fas fa-times-circle"></i> Restart failed: '+error.message;btn.disabled=false;btn.innerHTML='<i class="fas fa-rotate-right"></i><span>Restart Dashboard Service</span>';}}
 async function rebootSystem(){if(!confirm('REBOOT THE ENTIRE SYSTEM? This will disconnect you!'))return;if(!confirm('Are you ABSOLUTELY SURE? The system will reboot immediately!'))return;const btn=document.getElementById('rebootBtn');const messageDiv=document.getElementById('actionMessage');btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i><span>Rebooting...</span>';messageDiv.className='action-message info';messageDiv.innerHTML='<i class="fas fa-info-circle"></i> System is rebooting... Please wait 30-60 seconds.';try{await fetch('/api/admin/reboot',{method:'POST'});messageDiv.className='action-message success';messageDiv.innerHTML='<i class="fas fa-power-off"></i> System is rebooting. Reconnect in about 60 seconds.';}catch(error){messageDiv.className='action-message success';messageDiv.innerHTML='<i class="fas fa-power-off"></i> System is rebooting. Reconnect in about 60 seconds.';}}
-document.getElementById('piIcon').addEventListener('click',()=>{const container=document.getElementById('dashboardContainer');const header=document.querySelector('.header');const modal=document.getElementById('gibsonModal');container.classList.add('pixelate');header.classList.add('pixelate');setTimeout(()=>{modal.classList.add('active');checkVersion();},300);});document.getElementById('closeGibsonModal').addEventListener('click',()=>{const container=document.getElementById('dashboardContainer');const header=document.querySelector('.header');const modal=document.getElementById('gibsonModal');modal.classList.remove('active');setTimeout(()=>{container.classList.remove('pixelate');header.classList.remove('pixelate');},300);});document.getElementById('updateBtn').addEventListener('click',updateSystem);document.getElementById('restartBtn').addEventListener('click',restartService);document.getElementById('rebootBtn').addEventListener('click',rebootSystem);document.getElementById('deviceDetailsBtn').addEventListener('click',()=>{document.getElementById('deviceModal').classList.add('active');loadDevices();});document.getElementById('closeDeviceModal').addEventListener('click',()=>{document.getElementById('deviceModal').classList.remove('active');});document.getElementById('speedTestBtn').addEventListener('click',()=>{document.getElementById('speedTestModal').classList.add('active');});document.getElementById('closeSpeedTestModal').addEventListener('click',()=>{document.getElementById('speedTestModal').classList.remove('active');});document.getElementById('runSpeedTest').addEventListener('click',runSpeedTest);document.querySelectorAll('.modal').forEach(modal=>{modal.addEventListener('click',(e)=>{if(e.target===modal){modal.classList.remove('active');const container=document.getElementById('dashboardContainer');const header=document.querySelector('.header');container.classList.remove('pixelate');header.classList.remove('pixelate');}});});window.addEventListener('load',()=>{initCharts();updateDashboard();setInterval(updateDashboard,60000);});
+async function changeNetworkId(){document.getElementById('networkIdModal').classList.add('active');}
+async function saveNetworkId(){const newNetworkId=document.getElementById('newNetworkId').value.trim();const btn=document.getElementById('saveNetworkBtn');const messageDiv=document.getElementById('networkMessage');if(!newNetworkId||!newNetworkId.match(/^\d+$/)){messageDiv.className='action-message error';messageDiv.innerHTML='<i class="fas fa-times-circle"></i> Please enter a valid numeric Network ID';return;}btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i><span>Saving...</span>';messageDiv.className='action-message info';messageDiv.innerHTML='<i class="fas fa-info-circle"></i> Updating Network ID...';try{const response=await fetch('/api/admin/network-id',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({network_id:newNetworkId})});const data=await response.json();if(data.success){messageDiv.className='action-message success';messageDiv.innerHTML='<i class="fas fa-check-circle"></i> '+data.message;setTimeout(()=>{document.getElementById('networkIdModal').classList.remove('active');document.getElementById('newNetworkId').value='';messageDiv.innerHTML='';setTimeout(()=>location.reload(),3000);},2000);}else{messageDiv.className='action-message error';messageDiv.innerHTML='<i class="fas fa-times-circle"></i> '+data.message;btn.disabled=false;btn.innerHTML='<i class="fas fa-save"></i><span>Save & Restart Service</span>';}}catch(error){messageDiv.className='action-message error';messageDiv.innerHTML='<i class="fas fa-times-circle"></i> Failed: '+error.message;btn.disabled=false;btn.innerHTML='<i class="fas fa-save"></i><span>Save & Restart Service</span>';}}
+document.getElementById('piIcon').addEventListener('click',()=>{const overlay=document.getElementById('pixelateOverlay');const modal=document.getElementById('gibsonModal');overlay.classList.add('active');setTimeout(()=>{modal.classList.add('active');checkVersion();},300);});document.getElementById('closeGibsonModal').addEventListener('click',()=>{const overlay=document.getElementById('pixelateOverlay');const modal=document.getElementById('gibsonModal');modal.classList.remove('active');setTimeout(()=>{overlay.classList.remove('active');},300);});document.getElementById('updateBtn').addEventListener('click',updateSystem);document.getElementById('changeNetworkBtn').addEventListener('click',changeNetworkId);document.getElementById('restartBtn').addEventListener('click',restartService);document.getElementById('rebootBtn').addEventListener('click',rebootSystem);document.getElementById('saveNetworkBtn').addEventListener('click',saveNetworkId);document.getElementById('closeNetworkIdModal').addEventListener('click',()=>{document.getElementById('networkIdModal').classList.remove('active');document.getElementById('newNetworkId').value='';document.getElementById('networkMessage').innerHTML='';});document.getElementById('deviceDetailsBtn').addEventListener('click',()=>{document.getElementById('deviceModal').classList.add('active');loadDevices();});document.getElementById('closeDeviceModal').addEventListener('click',()=>{document.getElementById('deviceModal').classList.remove('active');});document.getElementById('speedTestBtn').addEventListener('click',()=>{document.getElementById('speedTestModal').classList.add('active');});document.getElementById('closeSpeedTestModal').addEventListener('click',()=>{document.getElementById('speedTestModal').classList.remove('active');});document.getElementById('runSpeedTest').addEventListener('click',runSpeedTest);document.querySelectorAll('.modal').forEach(modal=>{modal.addEventListener('click',(e)=>{if(e.target===modal){modal.classList.remove('active');document.getElementById('pixelateOverlay').classList.remove('active');}});});window.addEventListener('load',()=>{initCharts();updateDashboard();setInterval(updateDashboard,60000);});
 </script></body></html>"""
     with open(f"{INSTALL_DIR}/frontend/index.html", 'w') as f:
         f.write(html_content)
@@ -859,22 +921,18 @@ def print_completion_message():
     print_header("Installation Complete!")
     print_success(f"Eero Dashboard v{SCRIPT_VERSION} installed successfully!")
     print()
-    print_color(Colors.CYAN, "🎉 What's New in v3.0.1:")
-    print_color(Colors.GREEN, "  ✓ The Gibson admin panel (π icon)")
-    print_color(Colors.GREEN, "  ✓ Web-based system management")
-    print_color(Colors.GREEN, "  ✓ One-click updates")
-    print_color(Colors.GREEN, "  ✓ Service restart from UI")
-    print_color(Colors.GREEN, "  ✓ System reboot from UI")
-    print_color(Colors.GREEN, "  ✓ Persistent Network ID config")
-    print_color(Colors.GREEN, "  ✓ Integrated authentication")
+    print_color(Colors.CYAN, "🎉 What's New in v3.0.2:")
+    print_color(Colors.GREEN, "  ✓ Fixed Network ID input (now shows typing)")
+    print_color(Colors.GREEN, "  ✓ Fixed authentication token reuse")
+    print_color(Colors.GREEN, "  ✓ Added 'Change Network ID' button in The Gibson")
+    print_color(Colors.GREEN, "  ✓ Smaller π icon (30px)")
+    print_color(Colors.GREEN, "  ✓ Pixelation effect instead of blur")
     print()
     config = load_config()
     if config.get('network_id'):
         print_info(f"Network ID: {config['network_id']}")
     print_info(f"Dashboard: http://localhost")
     print_info(f"Click the π icon (bottom-right) for admin panel")
-    print()
-    print_warning("Note: Service takes ~10 seconds to fully start")
 
 def main():
     os.system('clear')
