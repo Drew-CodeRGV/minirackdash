@@ -101,6 +101,7 @@ def save_config(config):
         return False
 
 def input_with_timeout(prompt, timeout, default=None):
+    """Get user input with timeout"""
     result = [None]
     
     def get_input():
@@ -122,19 +123,19 @@ def input_with_timeout(prompt, timeout, default=None):
         if not thread.is_alive():
             break
         if default:
-            print_color(Colors.YELLOW, f"  Using default in {i} seconds...        ", end='\r')
+            print(f"{Colors.YELLOW}  Using default in {i} seconds...        {Colors.NC}", end='\r')
         else:
-            print_color(Colors.YELLOW, f"  Waiting for input... {i}s              ", end='\r')
+            print(f"{Colors.YELLOW}  Waiting for input... {i}s              {Colors.NC}", end='\r')
         time.sleep(1)
     
     print()
     
     if thread.is_alive() or result[0] is None or result[0] == '':
         if default:
-            print_color(Colors.YELLOW, f"  Using default: {default}                    ")
+            print(f"{Colors.YELLOW}  Using default: {default}                    {Colors.NC}")
             return default
         else:
-            print_color(Colors.YELLOW, f"  No input received                           ")
+            print(f"{Colors.YELLOW}  No input received                           {Colors.NC}")
             return None
     
     return result[0]
@@ -311,28 +312,37 @@ def create_user():
 
 def update_system():
     print_header("Updating System Packages")
+    print_info("Updating package lists...")
     run_command('apt-get update', timeout=120, show_output=True)
+    print_info("Upgrading packages (this may take several minutes)...")
     run_command('DEBIAN_FRONTEND=noninteractive apt-get upgrade -y', timeout=600, show_output=True)
+    print_success("System updated")
 
 def install_dependencies():
     print_header("Installing Dependencies")
     packages = 'python3 python3-pip python3-venv nginx git curl speedtest-cli chromium-browser unclutter x11-xserver-utils xdotool'
+    print_info(f"Installing packages...")
     run_command(f"DEBIAN_FRONTEND=noninteractive apt-get install -y {packages}", timeout=600, show_output=True)
     print_success("Dependencies installed")
 
 def create_directory_structure():
+    print_info("Creating directory structure...")
     for directory in [f"{INSTALL_DIR}/backend", f"{INSTALL_DIR}/frontend", f"{INSTALL_DIR}/frontend/assets", f"{INSTALL_DIR}/logs"]:
         Path(directory).mkdir(parents=True, exist_ok=True)
     run_command(f'chown -R {USER}:{USER} /home/eero')
+    print_success("Directories created")
 
 def setup_python_environment():
+    print_info("Setting up Python virtual environment...")
     venv_path = f"{INSTALL_DIR}/venv"
     run_command(f'sudo -u {USER} python3 -m venv {venv_path}', timeout=120)
+    print_info("Installing Python packages...")
     run_command(f'sudo -u {USER} {venv_path}/bin/pip install --quiet flask flask-cors requests gunicorn speedtest-cli', timeout=300)
     print_success("Python environment ready")
+
 def create_backend_api(network_id):
     print_info("Creating backend API...")
-    backend_code = """#!/usr/bin/env python3
+    backend_code = f'''#!/usr/bin/env python3
 import os
 import sys
 import requests
@@ -355,12 +365,12 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-NETWORK_ID = "NETWORK_ID_PLACEHOLDER"
+NETWORK_ID = "{network_id}"
 EERO_API_BASE = "https://api-user.e2ro.com/2.2"
 API_TOKEN_FILE = "/home/eero/dashboard/.eero_token"
-GITHUB_REPO = "GITHUB_REPO_PLACEHOLDER"
-GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
-SCRIPT_URL_V3 = f"{GITHUB_RAW}/v3/init_dashboard.py"
+GITHUB_REPO = "{GITHUB_REPO}"
+GITHUB_RAW = f"https://raw.githubusercontent.com/{{GITHUB_REPO}}/main"
+SCRIPT_URL_V3 = f"{{GITHUB_RAW}}/v3/init_dashboard.py"
 
 class EeroAPI:
     def __init__(self):
@@ -372,24 +382,24 @@ class EeroAPI:
             if os.path.exists(API_TOKEN_FILE):
                 with open(API_TOKEN_FILE, 'r') as f:
                     token = f.read().strip()
-                    logging.info(f"Loaded API token: {token[:10]}...")
+                    logging.info(f"Loaded API token: {{token[:10]}}...")
                     return token
         except Exception as e:
-            logging.error(f"Error loading API token: {e}")
+            logging.error(f"Error loading API token: {{e}}")
         return None
     
     def get_headers(self):
-        headers = {
+        headers = {{
             'Content-Type': 'application/json',
             'User-Agent': 'Eero-Dashboard/3.0'
-        }
+        }}
         if self.api_token:
             headers['X-User-Token'] = self.api_token
         return headers
     
     def get_all_devices(self):
         try:
-            url = f"{EERO_API_BASE}/networks/{NETWORK_ID}/devices"
+            url = f"{{EERO_API_BASE}}/networks/{{NETWORK_ID}}/devices"
             response = self.session.get(url, headers=self.get_headers(), timeout=10)
             response.raise_for_status()
             devices_data = response.json()
@@ -401,7 +411,7 @@ class EeroAPI:
                     return devices_data['data']['devices']
             return []
         except Exception as e:
-            logging.error(f"Error fetching devices: {e}")
+            logging.error(f"Error fetching devices: {{e}}")
             return []
 
 def safe_str(value, default=''):
@@ -416,7 +426,7 @@ def categorize_device_os(device):
     hostname = safe_lower(device.get('hostname'), '')
     model_name = safe_lower(device.get('model_name'), '')
     display_name = safe_lower(device.get('display_name'), '')
-    all_text = f"{manufacturer} {device_type} {hostname} {model_name} {display_name}"
+    all_text = f"{{manufacturer}} {{device_type}} {{hostname}} {{model_name}} {{display_name}}"
     
     apple_keywords = ['apple', 'iphone', 'ipad', 'ipod', 'mac', 'macbook', 'airpods', 'apple watch', 'ios']
     for keyword in apple_keywords:
@@ -436,7 +446,7 @@ def categorize_device_os(device):
     return 'Other'
 
 def estimate_signal_from_bars(score_bars):
-    score_map = {5: -45, 4: -55, 3: -65, 2: -75, 1: -85, 0: -90}
+    score_map = {{5: -45, 4: -55, 3: -65, 2: -75, 1: -85, 0: -90}}
     return score_map.get(score_bars, -90)
 
 def get_signal_quality(score_bars):
@@ -476,7 +486,7 @@ def parse_frequency(interface):
         elif 5.0 <= freq_val < 6.0: band = '5GHz'
         elif 6.0 <= freq_val < 7.0: band = '6GHz'
         else: band = 'Unknown'
-        return f"{freq} GHz", band
+        return f"{{freq}} GHz", band
     except:
         return 'N/A', 'Unknown'
 
@@ -495,16 +505,16 @@ def compare_versions(v1, v2):
     return 0
 
 eero_api = EeroAPI()
-data_cache = {
+data_cache = {{
     'connected_users': [],
-    'device_os': {},
-    'frequency_distribution': {},
+    'device_os': {{}},
+    'frequency_distribution': {{}},
     'signal_strength_avg': [],
     'devices': [],
     'last_update': None,
     'speedtest_running': False,
     'speedtest_result': None
-}
+}}
 
 def update_cache():
     global data_cache
@@ -522,10 +532,10 @@ def update_cache():
                 wireless_connected.append(device)
         
         current_time = datetime.now()
-        data_cache['connected_users'].append({
+        data_cache['connected_users'].append({{
             'timestamp': current_time.isoformat(),
             'count': len(wireless_connected)
-        })
+        }})
         
         two_hours_ago = current_time - timedelta(hours=2)
         data_cache['connected_users'] = [
@@ -533,8 +543,8 @@ def update_cache():
             if datetime.fromisoformat(entry['timestamp']) > two_hours_ago
         ]
         
-        device_os = {'iOS': 0, 'Android': 0, 'Windows': 0, 'Other': 0}
-        frequency_dist = {'2.4GHz': 0, '5GHz': 0, '6GHz': 0, 'Unknown': 0}
+        device_os = {{'iOS': 0, 'Android': 0, 'Windows': 0, 'Other': 0}}
+        frequency_dist = {{'2.4GHz': 0, '5GHz': 0, '6GHz': 0, 'Unknown': 0}}
         signal_strengths = []
         device_list = []
         
@@ -542,8 +552,8 @@ def update_cache():
             os_type = categorize_device_os(device)
             device_os[os_type] += 1
             
-            connectivity = device.get('connectivity', {}) or {}
-            interface = device.get('interface', {}) or {}
+            connectivity = device.get('connectivity', {{}}) or {{}}
+            interface = device.get('interface', {{}}) or {{}}
             
             freq_display, freq_band = parse_frequency(interface)
             if freq_band in frequency_dist:
@@ -566,19 +576,19 @@ def update_cache():
             
             device_name = device.get('nickname') or device.get('hostname') or device.get('display_name') or 'Unknown Device'
             
-            device_info = {
+            device_info = {{
                 'name': safe_str(device_name),
                 'ip': ', '.join(device.get('ips', [])) if device.get('ips') else 'N/A',
                 'mac': safe_str(device.get('mac'), 'N/A'),
                 'manufacturer': safe_str(device.get('manufacturer'), 'Unknown'),
                 'signal_avg': signal_percent,
-                'signal_avg_dbm': f"{signal_avg_dbm} dBm" if signal_avg_dbm else 'N/A',
+                'signal_avg_dbm': f"{{signal_avg_dbm}} dBm" if signal_avg_dbm else 'N/A',
                 'score_bars': score_bars,
                 'signal_quality': get_signal_quality(score_bars),
                 'device_os': os_type,
                 'frequency': freq_display,
                 'frequency_band': freq_band
-            }
+            }}
             device_list.append(device_info)
         
         data_cache['device_os'] = device_os
@@ -587,10 +597,10 @@ def update_cache():
         
         if signal_strengths:
             avg_signal = sum(signal_strengths) / len(signal_strengths)
-            data_cache['signal_strength_avg'].append({
+            data_cache['signal_strength_avg'].append({{
                 'timestamp': current_time.isoformat(),
                 'avg_dbm': round(avg_signal, 2)
-            })
+            }})
             data_cache['signal_strength_avg'] = [
                 entry for entry in data_cache['signal_strength_avg']
                 if datetime.fromisoformat(entry['timestamp']) > two_hours_ago
@@ -598,7 +608,7 @@ def update_cache():
         
         data_cache['last_update'] = current_time.isoformat()
     except Exception as e:
-        logging.error(f"Error updating cache: {e}")
+        logging.error(f"Error updating cache: {{e}}")
 
 def run_speedtest():
     global data_cache
@@ -606,14 +616,14 @@ def run_speedtest():
         data_cache['speedtest_running'] = True
         st = speedtest.Speedtest()
         st.get_best_server()
-        data_cache['speedtest_result'] = {
+        data_cache['speedtest_result'] = {{
             'download': round(st.download() / 1_000_000, 2),
             'upload': round(st.upload() / 1_000_000, 2),
             'ping': round(st.results.ping, 2),
             'timestamp': datetime.now().isoformat()
-        }
+        }}
     except Exception as e:
-        data_cache['speedtest_result'] = {'error': str(e)}
+        data_cache['speedtest_result'] = {{'error': str(e)}}
     finally:
         data_cache['speedtest_running'] = False
 
@@ -624,28 +634,28 @@ def get_dashboard_data():
 
 @app.route('/api/devices')
 def get_devices():
-    return jsonify({'devices': data_cache.get('devices', []), 'count': len(data_cache.get('devices', []))})
+    return jsonify({{'devices': data_cache.get('devices', []), 'count': len(data_cache.get('devices', []))}})
 
 @app.route('/api/speedtest/start', methods=['POST'])
 def start_speedtest():
     if data_cache['speedtest_running']:
-        return jsonify({'status': 'running'}), 409
+        return jsonify({{'status': 'running'}}), 409
     thread = threading.Thread(target=run_speedtest)
     thread.daemon = True
     thread.start()
-    return jsonify({'status': 'started'})
+    return jsonify({{'status': 'started'}})
 
 @app.route('/api/speedtest/status')
 def get_speedtest_status():
-    return jsonify({'running': data_cache['speedtest_running'], 'result': data_cache['speedtest_result']})
+    return jsonify({{'running': data_cache['speedtest_running'], 'result': data_cache['speedtest_result']}})
 
 @app.route('/api/health')
 def health_check():
-    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()})
+    return jsonify({{'status': 'ok', 'timestamp': datetime.now().isoformat()}})
 
 @app.route('/api/version')
 def get_version():
-    return jsonify({'version': '3.0.1', 'name': 'Eero Dashboard', 'network_id': NETWORK_ID})
+    return jsonify({{'version': '3.0.1', 'name': 'Eero Dashboard', 'network_id': NETWORK_ID}})
 
 @app.route('/api/admin/check-update')
 def check_update():
@@ -659,9 +669,9 @@ def check_update():
         else:
             latest_version = current_version
             update_available = False
-        return jsonify({'current_version': current_version, 'latest_version': latest_version, 'update_available': update_available})
+        return jsonify({{'current_version': current_version, 'latest_version': latest_version, 'update_available': update_available}})
     except Exception as e:
-        return jsonify({'current_version': '3.0.1', 'latest_version': '3.0.1', 'update_available': False, 'error': str(e)})
+        return jsonify({{'current_version': '3.0.1', 'latest_version': '3.0.1', 'update_available': False, 'error': str(e)}})
 
 @app.route('/api/admin/update', methods=['POST'])
 def update_system():
@@ -670,46 +680,44 @@ def update_system():
             latest_script = response.read().decode('utf-8')
         latest_version = extract_version_from_script(latest_script)
         if not latest_version or compare_versions(latest_version, '3.0.1') <= 0:
-            return jsonify({'success': False, 'message': 'Already running latest version'})
+            return jsonify({{'success': False, 'message': 'Already running latest version'}})
         script_path = '/root/init_dashboard.py'
         if not os.path.exists(script_path):
             script_path = os.path.abspath(sys.argv[0])
-        with open(f"{script_path}.backup", 'w') as f:
+        with open(f"{{script_path}}.backup", 'w') as f:
             with open(script_path, 'r') as orig:
                 f.write(orig.read())
         with open(script_path, 'w') as f:
             f.write(latest_script)
         os.chmod(script_path, 0o755)
         subprocess.Popen(['/usr/bin/sudo', '/usr/bin/python3', script_path, '--no-update'])
-        return jsonify({'success': True, 'message': f'Updated to v{latest_version}'})
+        return jsonify({{'success': True, 'message': f'Updated to v{{latest_version}}'}})
     except Exception as e:
-        return jsonify({'success': False, 'message': f'Update failed: {str(e)}'}), 500
+        return jsonify({{'success': False, 'message': f'Update failed: {{str(e)}}'}}, 500
 
 @app.route('/api/admin/restart', methods=['POST'])
 def restart_service():
     try:
         result = subprocess.run(['sudo', 'systemctl', 'restart', 'eero-dashboard'], capture_output=True, timeout=10)
         if result.returncode == 0:
-            return jsonify({'success': True, 'message': 'Service restarted'})
-        return jsonify({'success': False, 'message': 'Restart failed'}), 500
+            return jsonify({{'success': True, 'message': 'Service restarted'}})
+        return jsonify({{'success': False, 'message': 'Restart failed'}}), 500
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({{'success': False, 'message': str(e)}}), 500
 
 @app.route('/api/admin/reboot', methods=['POST'])
 def reboot_system():
     try:
         subprocess.Popen(['sudo', 'reboot'])
-        return jsonify({'success': True, 'message': 'System rebooting'})
+        return jsonify({{'success': True, 'message': 'System rebooting'}})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({{'success': False, 'message': str(e)}}), 500
 
 if __name__ == '__main__':
     logging.info("Starting Eero Dashboard Backend v3.0.1")
     update_cache()
     app.run(host='127.0.0.1', port=5000, debug=False)
-"""
-    backend_code = backend_code.replace('NETWORK_ID_PLACEHOLDER', network_id)
-    backend_code = backend_code.replace('GITHUB_REPO_PLACEHOLDER', GITHUB_REPO)
+'''
     with open(f"{INSTALL_DIR}/backend/eero_api.py", 'w') as f:
         f.write(backend_code)
     os.chmod(f"{INSTALL_DIR}/backend/eero_api.py", 0o755)
@@ -718,7 +726,6 @@ if __name__ == '__main__':
 
 def create_frontend():
     print_info("Creating frontend dashboard...")
-    # Due to size, I'm using a compact version - you can expand styles as needed
     html_content = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Eero Dashboard v3</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -858,12 +865,16 @@ def print_completion_message():
     print_color(Colors.GREEN, "  ✓ One-click updates")
     print_color(Colors.GREEN, "  ✓ Service restart from UI")
     print_color(Colors.GREEN, "  ✓ System reboot from UI")
+    print_color(Colors.GREEN, "  ✓ Persistent Network ID config")
+    print_color(Colors.GREEN, "  ✓ Integrated authentication")
     print()
     config = load_config()
     if config.get('network_id'):
         print_info(f"Network ID: {config['network_id']}")
     print_info(f"Dashboard: http://localhost")
     print_info(f"Click the π icon (bottom-right) for admin panel")
+    print()
+    print_warning("Note: Service takes ~10 seconds to fully start")
 
 def main():
     os.system('clear')
@@ -898,6 +909,8 @@ def main():
     except Exception as e:
         print()
         print_error(f"Installation failed: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == '__main__':
