@@ -9,7 +9,7 @@ import time
 import json
 from pathlib import Path
 
-SCRIPT_VERSION = "3.0.7"
+SCRIPT_VERSION = "3.0.8"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL_V3 = f"{GITHUB_RAW}/v3/init_dashboard.py"
@@ -600,7 +600,7 @@ def health():
 @app.route('/api/version')
 def version():
     c = load_config()
-    return jsonify({{'version': '3.0.7', 'name': 'Eero Dashboard', 'network_id': c.get('network_id', eero_api.network_id)}})
+    return jsonify({{'version': '3.0.8', 'name': 'Eero Dashboard', 'network_id': c.get('network_id', eero_api.network_id)}})
 
 @app.route('/api/admin/check-update')
 def check_update():
@@ -609,12 +609,12 @@ def check_update():
             ls = r.read().decode('utf-8')
         lv = extract_ver(ls)
         return jsonify({{
-            'current_version': '3.0.7',
-            'latest_version': lv or '3.0.7',
-            'update_available': compare_ver(lv or '3.0.7', '3.0.7') > 0
+            'current_version': '3.0.8',
+            'latest_version': lv or '3.0.8',
+            'update_available': compare_ver(lv or '3.0.8', '3.0.8') > 0
         }})
     except:
-        return jsonify({{'current_version': '3.0.7', 'latest_version': '3.0.7', 'update_available': False}})
+        return jsonify({{'current_version': '3.0.8', 'latest_version': '3.0.8', 'update_available': False}})
 
 @app.route('/api/admin/restart', methods=['POST'])
 def restart():
@@ -649,7 +649,7 @@ def change_network():
 
 if __name__ == '__main__':
     logging.info("=" * 80)
-    logging.info("Starting Eero Dashboard Backend v3.0.7")
+    logging.info("Starting Eero Dashboard Backend v3.0.8")
     logging.info("=" * 80)
     logging.info(f"Token file path: {{API_TOKEN_FILE}}")
     logging.info(f"Token file exists: {{os.path.exists(API_TOKEN_FILE)}}")
@@ -743,7 +743,624 @@ if __name__ == "__main__":
 
 def create_frontend():
     pi("Creating frontend...")
-    run_cmd(f"curl -s https://raw.githubusercontent.com/{GITHUB_REPO}/main/v3/index.html -o {INSTALL_DIR}/frontend/index.html")
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eero Dashboard v3</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #001a33 0%, #003366 100%);
+            font-family: 'Segoe UI', sans-serif;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+        .header {
+            background: rgba(0, 20, 40, 0.9);
+            padding: 8px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid rgba(77, 166, 255, 0.3);
+        }
+        .logo { height: 30px; }
+        .header-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #4da6ff;
+        }
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .header-btn {
+            padding: 6px 12px;
+            background: rgba(77, 166, 255, 0.2);
+            border: 2px solid #4da6ff;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+        .header-btn:hover {
+            background: rgba(77, 166, 255, 0.4);
+            transform: translateY(-2px);
+        }
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            font-size: 11px;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4CAF50;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pi-icon {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 30px;
+            height: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s;
+            z-index: 999;
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+        }
+        .pi-icon:hover {
+            transform: scale(1.1) rotate(180deg);
+        }
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            height: calc(100vh - 60px);
+        }
+        .chart-card {
+            background: rgba(0, 40, 80, 0.7);
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-align: center;
+            color: #4da6ff;
+            text-transform: uppercase;
+        }
+        .chart-subtitle {
+            font-size: 11px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 8px;
+        }
+        .chart-container {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: linear-gradient(135deg, #001a33 0%, #003366 100%);
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 900px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 2px solid rgba(77, 166, 255, 0.3);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(77, 166, 255, 0.3);
+        }
+        .modal-title {
+            font-size: 24px;
+            color: #4da6ff;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 28px;
+            cursor: pointer;
+        }
+        .close-btn:hover { color: #ff6b6b; }
+        .device-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .device-table th {
+            background: rgba(77, 166, 255, 0.2);
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #4da6ff;
+            border-bottom: 2px solid rgba(77, 166, 255, 0.3);
+        }
+        .device-table td {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .device-table tr:hover {
+            background: rgba(77, 166, 255, 0.1);
+        }
+        .signal-bar {
+            width: 100px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .signal-fill { height: 100%; border-radius: 4px; }
+        .signal-excellent { background: #4CAF50; }
+        .signal-good { background: #8BC34A; }
+        .signal-fair { background: #FFC107; }
+        .signal-poor { background: #FF9800; }
+        .signal-weak { background: #F44336; }
+        .device-count {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 15px;
+        }
+        .speedtest-container {
+            text-align: center;
+            padding: 20px;
+        }
+        .speedtest-results {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .speedtest-metric {
+            background: rgba(0, 40, 80, 0.5);
+            padding: 25px;
+            border-radius: 10px;
+        }
+        .speedtest-metric-label {
+            font-size: 14px;
+            color: #4da6ff;
+            margin-bottom: 10px;
+        }
+        .speedtest-metric-value {
+            font-size: 36px;
+            font-weight: 600;
+            color: #fff;
+        }
+        .speedtest-metric-unit {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .spinner {
+            border: 4px solid rgba(77, 166, 255, 0.3);
+            border-top: 4px solid #4da6ff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <img src="/assets/eero-logo.png" class="logo" onerror="this.style.display='none'">
+            <div class="header-title">Network Dashboard v3.0.8</div>
+        </div>
+        <div class="header-actions">
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span id="lastUpdate">Loading...</span>
+            </div>
+            <button class="header-btn" id="deviceDetailsBtn">
+                <i class="fas fa-list"></i>
+                <span>Devices</span>
+            </button>
+            <button class="header-btn" id="speedTestBtn">
+                <i class="fas fa-gauge-high"></i>
+                <span>Speed Test</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="chart-card">
+            <div class="chart-title">Connected Users</div>
+            <div class="chart-subtitle">Wireless devices over time</div>
+            <div class="chart-container">
+                <canvas id="usersChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Device OS</div>
+            <div class="chart-subtitle" id="deviceOsSubtitle">Loading...</div>
+            <div class="chart-container">
+                <canvas id="deviceOSChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Frequency Distribution</div>
+            <div class="chart-subtitle" id="frequencySubtitle">Loading...</div>
+            <div class="chart-container">
+                <canvas id="frequencyChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Average Signal Strength</div>
+            <div class="chart-subtitle">Network-wide average (dBm)</div>
+            <div class="chart-container">
+                <canvas id="signalStrengthChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="pi-icon" id="piIcon">π</div>
+
+    <div class="modal" id="deviceModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Connected Devices</h2>
+                <button class="close-btn" id="closeDeviceModal">&times;</button>
+            </div>
+            <div class="device-count" id="deviceCount">Loading...</div>
+            <table class="device-table">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>OS</th>
+                        <th>Freq</th>
+                        <th>IP</th>
+                        <th>Manufacturer</th>
+                        <th>Signal</th>
+                    </tr>
+                </thead>
+                <tbody id="deviceTableBody">
+                    <tr><td colspan="6" style="text-align: center;">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="modal" id="speedTestModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Speed Test</h2>
+                <button class="close-btn" id="closeSpeedTestModal">&times;</button>
+            </div>
+            <div class="speedtest-container" id="speedTestContainer">
+                <button class="header-btn" id="runSpeedTest" style="margin: 20px auto;">
+                    <i class="fas fa-play"></i>
+                    <span>Run Test</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let charts = {};
+        const cc = {
+            primary: '#4da6ff',
+            success: '#51cf66',
+            warning: '#ffd43b',
+            info: '#74c0fc',
+            purple: '#b197fc',
+            orange: '#ff922b'
+        };
+        const opts = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: { color: '#fff', font: { size: 10 } }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { color: '#fff', font: { size: 9 } },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                },
+                x: {
+                    ticks: { color: '#fff', font: { size: 9 } },
+                    grid: { color: 'rgba(255,255,255,0.1)' }
+                }
+            }
+        };
+
+        function initCharts() {
+            charts.users = new Chart(document.getElementById('usersChart').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Connected',
+                        data: [],
+                        borderColor: cc.primary,
+                        backgroundColor: 'rgba(77,166,255,0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2
+                    }]
+                },
+                options: opts
+            });
+
+            charts.deviceOS = new Chart(document.getElementById('deviceOSChart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['iOS', 'Android', 'Windows', 'Other'],
+                    datasets: [{
+                        data: [0, 0, 0, 0],
+                        backgroundColor: [cc.primary, cc.success, cc.info, cc.warning],
+                        borderWidth: 2,
+                        borderColor: '#001a33'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#fff', font: { size: 10 }, padding: 8 }
+                        }
+                    }
+                }
+            });
+
+            charts.frequency = new Chart(document.getElementById('frequencyChart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['2.4 GHz', '5 GHz', '6 GHz'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: [cc.orange, cc.primary, cc.purple],
+                        borderWidth: 2,
+                        borderColor: '#001a33'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#fff', font: { size: 10 }, padding: 8 }
+                        }
+                    }
+                }
+            });
+
+            charts.signalStrength = new Chart(document.getElementById('signalStrengthChart').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Avg Signal',
+                        data: [],
+                        borderColor: cc.success,
+                        backgroundColor: 'rgba(81,207,102,0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        borderWidth: 2
+                    }]
+                },
+                options: opts
+            });
+        }
+
+        async function updateDashboard() {
+            try {
+                const r = await fetch('/api/dashboard');
+                const d = await r.json();
+
+                charts.users.data.labels = d.connected_users.map(e => new Date(e.timestamp).toLocaleTimeString());
+                charts.users.data.datasets[0].data = d.connected_users.map(e => e.count);
+                charts.users.update();
+
+                const os = d.device_os || {};
+                const tot = Object.values(os).reduce((a, b) => a + b, 0);
+                charts.deviceOS.data.datasets[0].data = [os.iOS || 0, os.Android || 0, os.Windows || 0, os.Other || 0];
+                charts.deviceOS.update();
+                document.getElementById('deviceOsSubtitle').textContent = `${tot} devices`;
+
+                const fd = d.frequency_distribution || {};
+                const tf = (fd['2.4GHz'] || 0) + (fd['5GHz'] || 0) + (fd['6GHz'] || 0);
+                charts.frequency.data.datasets[0].data = [fd['2.4GHz'] || 0, fd['5GHz'] || 0, fd['6GHz'] || 0];
+                charts.frequency.update();
+                document.getElementById('frequencySubtitle').textContent = `${tf} devices`;
+
+                charts.signalStrength.data.labels = d.signal_strength_avg.map(e => new Date(e.timestamp).toLocaleTimeString());
+                charts.signalStrength.data.datasets[0].data = d.signal_strength_avg.map(e => e.avg_dbm);
+                charts.signalStrength.update();
+
+                document.getElementById('lastUpdate').textContent = `Updated: ${new Date(d.last_update).toLocaleTimeString()}`;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function getSigClass(s) {
+            if (s >= 80) return 'signal-excellent';
+            if (s >= 60) return 'signal-good';
+            if (s >= 40) return 'signal-fair';
+            if (s >= 20) return 'signal-poor';
+            return 'signal-weak';
+        }
+
+        async function loadDevices() {
+            try {
+                const r = await fetch('/api/devices');
+                const d = await r.json();
+                document.getElementById('deviceCount').textContent = `Total: ${d.count} devices`;
+                const tb = document.getElementById('deviceTableBody');
+                if (d.devices.length === 0) {
+                    tb.innerHTML = '<tr><td colspan="6" style="text-align: center;">No devices</td></tr>';
+                    return;
+                }
+                tb.innerHTML = d.devices.map(dev => `
+                    <tr>
+                        <td><strong>${dev.name}</strong></td>
+                        <td>${dev.device_os}</td>
+                        <td>${dev.frequency}</td>
+                        <td>${dev.ip}</td>
+                        <td>${dev.manufacturer}</td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="signal-bar">
+                                    <div class="signal-fill ${getSigClass(dev.signal_avg)}" style="width: ${dev.signal_avg}%"></div>
+                                </div>
+                                <small style="color: rgba(255,255,255,0.6);">${dev.signal_quality}</small>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function runSpeedTest() {
+            const btn = document.getElementById('runSpeedTest');
+            const cont = document.getElementById('speedTestContainer');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Running...</span>';
+            btn.disabled = true;
+            cont.innerHTML = '<div class="spinner"></div><p>Testing speed...</p>';
+            try {
+                await fetch('/api/speedtest/start', { method: 'POST' });
+                const check = setInterval(async () => {
+                    const r = await fetch('/api/speedtest/status');
+                    const d = await r.json();
+                    if (!d.running && d.result) {
+                        clearInterval(check);
+                        if (d.result.error) {
+                            cont.innerHTML = `<p style="color: #ff6b6b;">Error: ${d.result.error}</p>`;
+                        } else {
+                            cont.innerHTML = `
+                                <div class="speedtest-results">
+                                    <div class="speedtest-metric">
+                                        <div class="speedtest-metric-label">Download</div>
+                                        <div class="speedtest-metric-value">${d.result.download}</div>
+                                        <div class="speedtest-metric-unit">Mbps</div>
+                                    </div>
+                                    <div class="speedtest-metric">
+                                        <div class="speedtest-metric-label">Upload</div>
+                                        <div class="speedtest-metric-value">${d.result.upload}</div>
+                                        <div class="speedtest-metric-unit">Mbps</div>
+                                    </div>
+                                    <div class="speedtest-metric">
+                                        <div class="speedtest-metric-label">Ping</div>
+                                        <div class="speedtest-metric-value">${d.result.ping}</div>
+                                        <div class="speedtest-metric-unit">ms</div>
+                                    </div>
+                                </div>
+                                <button class="header-btn" onclick="runSpeedTest()" style="margin: 20px auto;">
+                                    <i class="fas fa-redo"></i><span>Again</span>
+                                </button>
+                            `;
+                        }
+                        btn.innerHTML = '<i class="fas fa-play"></i><span>Run Test</span>';
+                        btn.disabled = false;
+                    }
+                }, 2000);
+            } catch (e) {
+                cont.innerHTML = `<p style="color: #ff6b6b;">Error</p>`;
+                btn.innerHTML = '<i class="fas fa-play"></i><span>Run Test</span>';
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('deviceDetailsBtn').addEventListener('click', () => {
+            document.getElementById('deviceModal').classList.add('active');
+            loadDevices();
+        });
+        document.getElementById('closeDeviceModal').addEventListener('click', () => 
+            document.getElementById('deviceModal').classList.remove('active')
+        );
+        document.getElementById('speedTestBtn').addEventListener('click', () => 
+            document.getElementById('speedTestModal').classList.add('active')
+        );
+        document.getElementById('closeSpeedTestModal').addEventListener('click', () => 
+            document.getElementById('speedTestModal').classList.remove('active')
+        );
+        document.getElementById('runSpeedTest').addEventListener('click', runSpeedTest);
+        
+        document.querySelectorAll('.modal').forEach(m => {
+            m.addEventListener('click', e => {
+                if (e.target === m) m.classList.remove('active');
+            });
+        });
+
+        window.addEventListener('load', () => {
+            initCharts();
+            updateDashboard();
+            setInterval(updateDashboard, 60000);
+        });
+    </script>
+</body>
+</html>"""
+    with open(f"{INSTALL_DIR}/frontend/index.html", 'w') as f:
+        f.write(html)
     run_cmd(f'chown {USER}:{USER} {INSTALL_DIR}/frontend/index.html')
     ps("Frontend created")
 
@@ -856,16 +1473,12 @@ def main():
         pc(C.C, "2. Restart service:")
         print("   sudo systemctl restart eero-dashboard")
         print()
-        pc(C.C, "3. Watch logs for diagnostics:")
+        pc(C.C, "3. Watch logs:")
         print("   tail -f /home/eero/dashboard/logs/backend.log")
         print()
-        pc(C.C, "4. Look for these lines in logs:")
-        print("   - 'Token file exists: True'")
-        print("   - 'Token loaded successfully'")
-        print("   - 'Received X total devices from API'")
-        print()
         pi("Dashboard: http://localhost")
-        pi("Admin: Click π icon (bottom-right)")
+        pi("Devices Button: Top-right header")
+        pi("Speed Test Button: Top-right header")
     except KeyboardInterrupt:
         pe("\nCancelled")
         sys.exit(1)
