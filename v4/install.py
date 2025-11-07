@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MiniRack Dashboard v4.0.1 - Simplified Installer
+MiniRack Dashboard v4.0.2 - Simplified Installer
 Two-file system: installer + dashboard
 """
 import os
@@ -8,10 +8,11 @@ import sys
 import subprocess
 import urllib.request
 import json
+import re
 from pathlib import Path
 from datetime import datetime
 
-VERSION = "4.0.1"
+VERSION = "4.0.2"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/v4"
 INSTALL_DIR = "/home/eero/dashboard"
@@ -78,6 +79,90 @@ def download(url, desc):
         c(Colors.RED, f"✗ Failed to download {desc}: {e}")
         return None
 
+def compare_versions(v1, v2):
+    """Compare two version strings (e.g., '4.0.2' vs '4.0.1')"""
+    parts1 = [int(x) for x in v1.split('.')]
+    parts2 = [int(x) for x in v2.split('.')]
+    
+    for i in range(max(len(parts1), len(parts2))):
+        p1 = parts1[i] if i < len(parts1) else 0
+        p2 = parts2[i] if i < len(parts2) else 0
+        if p1 > p2:
+            return 1
+        elif p1 < p2:
+            return -1
+    return 0
+
+def check_for_updates():
+    """Check if newer version exists on GitHub"""
+    try:
+        c(Colors.CYAN, "ℹ Checking for updates...")
+        
+        # Download the remote install script to check version
+        url = f"{GITHUB_BASE}/install.py"
+        with urllib.request.urlopen(url, timeout=10) as response:
+            remote_content = response.read().decode('utf-8')
+        
+        # Extract version from remote script
+        match = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', remote_content)
+        if not match:
+            c(Colors.YELLOW, "⚠ Could not determine remote version")
+            return False
+        
+        remote_version = match.group(1)
+        c(Colors.CYAN, f"ℹ Current version: v{VERSION}")
+        c(Colors.CYAN, f"ℹ Remote version: v{remote_version}")
+        
+        comparison = compare_versions(remote_version, VERSION)
+        
+        if comparison > 0:
+            c(Colors.BOLD + Colors.YELLOW, f"\n⚠ UPDATE AVAILABLE: v{VERSION} → v{remote_version}\n")
+            
+            # 8 second countdown
+            import time
+            for i in range(8, 0, -1):
+                print(f"\r{Colors.YELLOW}Auto-updating in {i} seconds... (Press Ctrl+C to cancel){Colors.NC}", end='', flush=True)
+                time.sleep(1)
+            
+            print(f"\r{Colors.GREEN}✓ Proceeding with update...{Colors.NC}" + " " * 50)
+            
+            # Update the script
+            current_script = os.path.abspath(__file__)
+            backup_script = f"{current_script}.backup"
+            
+            # Backup current version
+            import shutil
+            shutil.copy2(current_script, backup_script)
+            c(Colors.GREEN, f"✓ Backed up to {backup_script}")
+            
+            # Write new version
+            with open(current_script, 'w') as f:
+                f.write(remote_content)
+            os.chmod(current_script, 0o755)
+            
+            c(Colors.GREEN, f"✓ Updated to v{remote_version}")
+            c(Colors.CYAN, "ℹ Restarting installer with new version...")
+            
+            time.sleep(1)
+            
+            # Re-execute with new version
+            os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
+            
+        elif comparison == 0:
+            c(Colors.GREEN, "✓ Already running the latest version")
+            return False
+        else:
+            c(Colors.CYAN, "ℹ Running a newer version than available online")
+            return False
+            
+    except KeyboardInterrupt:
+        print(f"\n{Colors.YELLOW}⚠ Update cancelled, continuing with current version{Colors.NC}")
+        return False
+    except Exception as e:
+        c(Colors.YELLOW, f"⚠ Could not check for updates: {e}")
+        c(Colors.CYAN, "ℹ Continuing with current version...")
+        return False
+
 class Installer:
     def __init__(self):
         self.config = load_json(CONFIG_FILE)
@@ -101,7 +186,7 @@ class Installer:
         """Check if update is needed"""
         installed_version = self.state.get('version', '0.0.0')
         if installed_version != VERSION:
-            c(Colors.YELLOW, f"⚠ Update available: {installed_version} → {VERSION}")
+            c(Colors.YELLOW, f"⚠ Update detected: {installed_version} → {VERSION}")
             return True
         return False
     
@@ -360,10 +445,14 @@ except Exception as e:
     def run(self):
         """Run installation"""
         c(Colors.BOLD + Colors.BLUE, f"\n{'='*70}")
-        c(Colors.BOLD + Colors.BLUE, f"{'MiniRack Dashboard v4.0.1 Installer'.center(70)}")
+        c(Colors.BOLD + Colors.BLUE, f"{'MiniRack Dashboard v4.0.2 Installer'.center(70)}")
         c(Colors.BOLD + Colors.BLUE, f"{'='*70}\n")
         
         check_root()
+        
+        # Check for updates (unless --no-update flag)
+        if '--no-update' not in sys.argv:
+            check_for_updates()
         
         # Run steps
         self.step_foundation()
@@ -377,12 +466,11 @@ except Exception as e:
         c(Colors.BOLD + Colors.GREEN, "\n" + "="*70)
         c(Colors.BOLD + Colors.GREEN, "Installation Complete!".center(70))
         c(Colors.BOLD + Colors.GREEN, "="*70 + "\n")
-        c(Colors.CYAN, "🎉 What's New in v4.0.1:")
-        c(Colors.GREEN, "  ✓ Fixed Pi symbol display")
-        c(Colors.GREEN, "  ✓ Renamed to MiniRack Dashboard")
-        c(Colors.GREEN, "  ✓ 2-file system - simple & clean")
-        c(Colors.GREEN, "  ✓ Resumable installation")
-        c(Colors.GREEN, "  ✓ The Gibson control panel")
+        c(Colors.CYAN, "🎉 What's New in v4.0.2:")
+        c(Colors.GREEN, "  ✓ Semi-transparent Pi icon")
+        c(Colors.GREEN, "  ✓ Fixed Gibson admin functionality")
+        c(Colors.GREEN, "  ✓ Auto-update with 8 second countdown")
+        c(Colors.GREEN, "  ✓ Cleaner UI design")
         print()
         c(Colors.CYAN, "Next steps:")
         print(f"  1. Authorize: sudo {INSTALL_DIR}/setup_eero_auth.py")
@@ -391,8 +479,7 @@ except Exception as e:
         print(f"  4. Access: http://localhost")
         print()
         c(Colors.MAGENTA, "To update later:")
-        print(f"  curl -O {GITHUB_BASE}/install.py")
-        print(f"  sudo python3 install.py")
+        print(f"  sudo python3 {INSTALL_DIR}/install.py")
         print()
 
 if __name__ == '__main__':
