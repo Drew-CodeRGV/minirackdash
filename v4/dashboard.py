@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MiniRack Dashboard v4.0.1 - Complete Backend + Frontend
+MiniRack Dashboard v4.0.2 - Complete Backend + Frontend
 Single file with embedded HTML
 """
 import os
@@ -9,6 +9,7 @@ import speedtest
 import threading
 import subprocess
 import json
+import re
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -19,6 +20,7 @@ NETWORK_ID = "{{NETWORK_ID}}"
 USER = "{{USER}}"
 INSTALL_DIR = "{{INSTALL_DIR}}"
 GITHUB_REPO = "{{GITHUB_REPO}}"
+GITHUB_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/v4"
 
 # Flask app setup
 app = Flask(__name__)
@@ -43,6 +45,17 @@ def load_config():
         except:
             return {'network_id': NETWORK_ID}
     return {'network_id': NETWORK_ID}
+
+def save_config(config):
+    """Save configuration"""
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, indent=2, fp=f)
+        subprocess.run(['chown', f'{USER}:{USER}', CONFIG_FILE], check=False)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to save config: {e}")
+        return False
 
 class EeroAPI:
     def __init__(self):
@@ -83,7 +96,7 @@ class EeroAPI:
     def get_headers(self):
         headers = {
             'Content-Type': 'application/json',
-            'User-Agent': 'MiniRack-Dashboard/4.0.1'
+            'User-Agent': 'MiniRack-Dashboard/4.0.2'
         }
         if self.api_token:
             headers['X-User-Token'] = self.api_token
@@ -378,7 +391,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MiniRack Dashboard v4.0.1 - The Gibson</title>
+    <title>MiniRack Dashboard v4.0.2</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -419,11 +432,13 @@ HTML_CONTENT = """<!DOCTYPE html>
             font-weight: bold;
             color: #ffffff;
             border: 2px solid rgba(255, 255, 255, 0.3);
+            opacity: 0.7;
         }
         
         .gibson-icon:hover {
             transform: scale(1.1) rotate(180deg);
             box-shadow: 0 6px 20px rgba(77, 166, 255, 0.8);
+            opacity: 1;
         }
         
         .token-warning {
@@ -609,10 +624,10 @@ HTML_CONTENT = """<!DOCTYPE html>
         .gibson-modal .modal-content { max-width: 500px; }
         
         .gibson-title {
-            font-size: 28px;
+            font-size: 20px;
             color: #4da6ff;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             font-weight: 700;
             text-shadow: 0 0 10px rgba(77, 166, 255, 0.5);
         }
@@ -676,6 +691,11 @@ HTML_CONTENT = """<!DOCTYPE html>
         .version-status {
             font-size: 12px;
             color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .version-status.outdated {
+            color: #ff9800;
+            font-weight: bold;
         }
         
         .device-table {
@@ -776,7 +796,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
     <div class="pixelate" id="mainContent">
         <div class="header">
-            <div class="header-title">MiniRack Dashboard v4.0.1 - The Gibson</div>
+            <div class="header-title">MiniRack Dashboard v4.0.2</div>
             <div class="header-actions">
                 <div class="status-indicator">
                     <div class="status-dot"></div>
@@ -834,7 +854,7 @@ HTML_CONTENT = """<!DOCTYPE html>
                 <button class="close-btn" id="closeGibson">&times;</button>
             </div>
             <div class="version-info">
-                <div class="version-current">v4.0.1</div>
+                <div class="version-current">v4.0.2</div>
                 <div class="version-status" id="versionStatus">Checking...</div>
             </div>
             <div class="gibson-actions">
@@ -922,6 +942,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 
     <script>
         let charts = {};
+        const CURRENT_VERSION = '4.0.2';
         const colors = {
             primary: '#4da6ff',
             success: '#51cf66',
@@ -930,6 +951,18 @@ HTML_CONTENT = """<!DOCTYPE html>
             orange: '#ff922b',
             purple: '#b197fc'
         };
+        
+        function compareVersions(v1, v2) {
+            const parts1 = v1.split('.').map(Number);
+            const parts2 = v2.split('.').map(Number);
+            for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+                const p1 = parts1[i] || 0;
+                const p2 = parts2[i] || 0;
+                if (p1 > p2) return 1;
+                if (p1 < p2) return -1;
+            }
+            return 0;
+        }
         
         function initCharts() {
             const opts = {
@@ -1098,29 +1131,63 @@ HTML_CONTENT = """<!DOCTYPE html>
         
         async function checkUpdates() {
             const el = document.getElementById('versionStatus');
+            const btn = document.getElementById('updateBtn');
             el.textContent = 'Checking...';
+            el.className = 'version-status';
+            
             try {
-                const res = await fetch('/api/version');
-                const data = await res.json();
-                el.textContent = 'Up to date';
+                const scriptUrl = 'https://raw.githubusercontent.com/{{GITHUB_REPO}}/main/v4/dashboard.py';
+                const res = await fetch(scriptUrl);
+                const text = await res.text();
+                const match = text.match(/User-Agent.*?(\d+\.\d+\.\d+)/);
+                
+                if (match) {
+                    const remoteVersion = match[1];
+                    const comparison = compareVersions(remoteVersion, CURRENT_VERSION);
+                    
+                    if (comparison > 0) {
+                        el.textContent = `Update available: v${remoteVersion}`;
+                        el.className = 'version-status outdated';
+                        btn.innerHTML = `
+                            <i class="fas fa-download"></i>
+                            <div class="gibson-btn-label">Update Available!</div>
+                            <div class="gibson-btn-desc">Update to v${remoteVersion}</div>
+                        `;
+                    } else {
+                        el.textContent = 'Up to date';
+                    }
+                } else {
+                    el.textContent = 'Could not check version';
+                }
             } catch(e) {
+                console.error('Version check error:', e);
                 el.textContent = 'Check failed';
             }
         }
         
         async function restartService() {
-            if (!confirm('Restart service?')) return;
-            await fetch('/api/system/restart', {method: 'POST'});
-            alert('Restarting...');
-            setTimeout(() => location.reload(), 5000);
+            if (!confirm('Restart the dashboard service? This will take about 10 seconds.')) return;
+            
+            try {
+                await fetch('/api/system/restart', {method: 'POST'});
+                alert('Service restarting... The dashboard will reload in 10 seconds.');
+                setTimeout(() => location.reload(), 10000);
+            } catch(e) {
+                alert('Error restarting service: ' + e.message);
+            }
         }
         
         async function rebootSystem() {
-            if (!confirm('Reboot system?')) return;
-            if (!confirm('Sure? All connections lost.')) return;
-            await fetch('/api/system/reboot', {method: 'POST'});
-            alert('Rebooting...');
-            closeGibson();
+            if (!confirm('Reboot the entire system? This will take 1-2 minutes.')) return;
+            if (!confirm('Are you absolutely sure? All connections will be lost.')) return;
+            
+            try {
+                await fetch('/api/system/reboot', {method: 'POST'});
+                alert('System rebooting... Please wait 1-2 minutes before reconnecting.');
+                closeGibson();
+            } catch(e) {
+                alert('Error rebooting system: ' + e.message);
+            }
         }
         
         function openReauth() {
@@ -1134,7 +1201,9 @@ HTML_CONTENT = """<!DOCTYPE html>
         // Event listeners
         document.getElementById('gibsonIcon').addEventListener('click', openGibson);
         document.getElementById('closeGibson').addEventListener('click', closeGibson);
-        document.getElementById('updateBtn').addEventListener('click', () => alert('Run: sudo python3 {{INSTALL_DIR}}/install.py'));
+        document.getElementById('updateBtn').addEventListener('click', () => {
+            alert('To update:\\n\\n1. SSH into your device\\n2. Run: sudo python3 {{INSTALL_DIR}}/install.py\\n\\nThe installer will auto-update if a new version is available.');
+        });
         document.getElementById('restartServiceBtn').addEventListener('click', restartService);
         document.getElementById('rebootSystemBtn').addEventListener('click', rebootSystem);
         document.getElementById('reauthBtn').addEventListener('click', openReauth);
@@ -1166,7 +1235,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         });
         
         window.addEventListener('load', () => {
-            console.log('MiniRack Dashboard v4.0.1 - The Gibson');
+            console.log('MiniRack Dashboard v4.0.2');
             initCharts();
             updateDashboard();
             setInterval(updateDashboard, 60000);
@@ -1180,6 +1249,7 @@ HTML_CONTENT = """<!DOCTYPE html>
 def index():
     """Serve main page"""
     html = HTML_CONTENT.replace('{{INSTALL_DIR}}', INSTALL_DIR)
+    html = html.replace('{{GITHUB_REPO}}', GITHUB_REPO)
     return html
 
 @app.route('/api/dashboard')
@@ -1232,10 +1302,35 @@ def reboot_system():
         logging.error(f"Reboot failed: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/api/config/network_id', methods=['POST'])
+def update_network_id():
+    """Update network ID"""
+    try:
+        data = request.get_json()
+        new_network_id = data.get('network_id')
+        
+        if not new_network_id or not new_network_id.isdigit():
+            return jsonify({'status': 'error', 'message': 'Invalid network ID'}), 400
+        
+        config = load_config()
+        config['network_id'] = new_network_id
+        config['network_id_updated'] = datetime.now().isoformat()
+        
+        if save_config(config):
+            eero_api.network_id = new_network_id
+            logging.info(f"Network ID updated to: {new_network_id}")
+            return jsonify({'status': 'success', 'message': 'Network ID updated'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to save config'}), 500
+            
+    except Exception as e:
+        logging.error(f"Failed to update network ID: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/api/version')
 def get_version():
     return jsonify({
-        'current_version': '4.0.1',
+        'current_version': '4.0.2',
         'name': 'MiniRack Dashboard - The Gibson',
         'repository': f'https://github.com/{GITHUB_REPO}'
     })
@@ -1249,6 +1344,6 @@ def health_check():
     })
 
 if __name__ == '__main__':
-    logging.info("Starting MiniRack Dashboard v4.0.1 - The Gibson")
+    logging.info("Starting MiniRack Dashboard v4.0.2 - The Gibson")
     update_cache()
     app.run(host='0.0.0.0', port=80, debug=False)
