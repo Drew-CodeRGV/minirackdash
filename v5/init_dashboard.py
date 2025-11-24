@@ -11,7 +11,7 @@ import json
 import requests
 from pathlib import Path
 
-SCRIPT_VERSION = "5.2.2"
+SCRIPT_VERSION = "5.2.4"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL_V5 = f"{GITHUB_RAW}/v5/init_dashboard.py"
@@ -472,7 +472,7 @@ def setup_python():
 def create_backend_api(network_id, api_url):
     print_info("Creating backend...")
     
-    backend_code = """#!/usr/bin/env python3
+    backend_code = r'''#!/usr/bin/env python3
 import os, sys, json, requests, speedtest, threading, subprocess, urllib.request, re, time, socket
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_from_directory
@@ -492,7 +492,7 @@ API_TOKEN_FILE = "/home/eero/dashboard/.eero_token"
 CONFIG_FILE = "/home/eero/dashboard/.config.json"
 GITHUB_RAW = "https://raw.githubusercontent.com/REPLACE_REPO/main"
 SCRIPT_URL_V5 = f"{GITHUB_RAW}/v5/init_dashboard.py"
-CURRENT_VERSION = "5.2.2"
+CURRENT_VERSION = "5.2.4"
 
 def check_port_available(port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -561,7 +561,7 @@ class EeroAPI:
         self.api_base = f"https://{self.api_url}/2.2"
     
     def get_headers(self):
-        headers = {'Content-Type': 'application/json', 'User-Agent': 'Eero-Dashboard/5.2.2'}
+        headers = {'Content-Type': 'application/json', 'User-Agent': 'Eero-Dashboard/5.2.4'}
         if self.api_token:
             headers['X-User-Token'] = self.api_token
         return headers
@@ -662,7 +662,7 @@ def parse_frequency(i):
         return 'N/A', 'Unknown'
 
 def extract_version_from_script(s):
-    match = re.search(r'SCRIPT_VERSION\\s*=\\s*["\']([^"\']+)["\']', s)
+    match = re.search(r'SCRIPT_VERSION\s*=\s*["\']([^"\']+)["\']', s)
     return match.group(1) if match else None
 
 def compare_versions(v1, v2):
@@ -943,7 +943,7 @@ def reauthorize():
 
 if __name__ == '__main__':
     logging.info("=" * 60)
-    logging.info("Starting Eero Dashboard Backend v5.2.2")
+    logging.info("Starting Eero Dashboard Backend v5.2.4")
     logging.info(f"API URL: {eero_api.api_url}")
     logging.info(f"Network ID: {eero_api.network_id}")
     logging.info("=" * 60)
@@ -970,7 +970,7 @@ if __name__ == '__main__':
     except Exception as e:
         logging.error(f"Failed to start server: {e}")
         sys.exit(1)
-"""
+'''
     
     backend_code = backend_code.replace("REPLACE_NETWORK_ID", network_id)
     backend_code = backend_code.replace("REPLACE_REPO", GITHUB_REPO)
@@ -981,15 +981,14 @@ if __name__ == '__main__':
     os.chmod(f"{INSTALL_DIR}/backend/eero_api.py", 0o755)
     run_command(f'chown {USER}:{USER} {INSTALL_DIR}/backend/eero_api.py')
     print_success("Backend created")
-
-def create_frontend():
+    def create_frontend():
     print_info("Creating frontend...")
     
     frontend_html = """<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Eero v5.2.2</title>
+    <title>Eero v5.2.4</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -1009,22 +1008,81 @@ def create_frontend():
         .chart-card { background: rgba(0,40,80,.7); border-radius: 10px; padding: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.1); display: flex; flex-direction: column; }
         .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; text-align: center; color: #4da6ff; text-transform: uppercase; }
         .chart-subtitle { font-size: 11px; text-align: center; color: rgba(255,255,255,.6); margin-bottom: 8px; }
-        .chart-container { flex: 1; position: relative; min-height: 0; }
-        canvas { max-width: 100%; max-height: 100%; }
+        .chart-container { flex: 1; position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; max-height: calc(100% - 50px); }
+        canvas { max-width: 100% !important; max-height: 100% !important; width: auto !important; height: auto !important; }
+        
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,.8); overflow: auto; }
+        .modal.active { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: linear-gradient(135deg, #001a33 0%, #003366 100%); border-radius: 15px; padding: 30px; max-width: 800px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 50px rgba(0,0,0,.5); border: 2px solid rgba(77,166,255,.3); position: relative; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid rgba(77,166,255,.3); }
+        .modal-title { font-size: 24px; font-weight: 700; color: #4da6ff; }
+        .modal-close { font-size: 28px; cursor: pointer; color: #fff; background: none; border: none; transition: all .3s; }
+        .modal-close:hover { color: #ff6b6b; transform: rotate(90deg); }
+        
+        /* Device List */
+        .device-grid { display: grid; gap: 15px; margin-top: 20px; }
+        .device-item { background: rgba(0,40,80,.5); padding: 15px; border-radius: 10px; border: 1px solid rgba(77,166,255,.2); transition: all .3s; }
+        .device-item:hover { border-color: #4da6ff; transform: translateX(5px); }
+        .device-name { font-size: 16px; font-weight: 600; color: #4da6ff; margin-bottom: 8px; }
+        .device-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
+        .device-info-item { display: flex; justify-content: space-between; padding: 4px 0; }
+        .device-label { color: rgba(255,255,255,.6); }
+        .device-value { color: #fff; font-weight: 500; }
+        .signal-bar { width: 100%; height: 8px; background: rgba(255,255,255,.1); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+        .signal-fill { height: 100%; background: linear-gradient(90deg, #51cf66 0%, #4da6ff 100%); transition: width .3s; }
+        
+        /* Speed Test */
+        .speedtest-content { text-align: center; }
+        .speedtest-btn { padding: 15px 30px; background: linear-gradient(135deg, #4da6ff 0%, #667eea 100%); border: none; border-radius: 10px; color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; margin: 20px 0; transition: all .3s; }
+        .speedtest-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 20px rgba(77,166,255,.4); }
+        .speedtest-btn:disabled { opacity: .5; cursor: not-allowed; }
+        .speedtest-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 30px; }
+        .speedtest-metric { background: rgba(0,40,80,.5); padding: 20px; border-radius: 10px; border: 1px solid rgba(77,166,255,.2); }
+        .speedtest-label { font-size: 12px; color: rgba(255,255,255,.6); margin-bottom: 8px; text-transform: uppercase; }
+        .speedtest-value { font-size: 32px; font-weight: 700; color: #4da6ff; }
+        .speedtest-unit { font-size: 14px; color: rgba(255,255,255,.7); margin-left: 5px; }
+        .spinner { border: 4px solid rgba(255,255,255,.1); border-top: 4px solid #4da6ff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Admin Menu */
+        .admin-menu { display: grid; gap: 15px; }
+        .admin-btn { padding: 15px; background: rgba(77,166,255,.2); border: 2px solid #4da6ff; border-radius: 10px; color: #fff; font-size: 14px; cursor: pointer; transition: all .3s; display: flex; align-items: center; gap: 10px; }
+        .admin-btn:hover { background: rgba(77,166,255,.4); transform: translateX(5px); }
+        .admin-btn i { font-size: 20px; }
+        .admin-info { background: rgba(0,40,80,.5); padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        .admin-info-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.1); }
+        .admin-info-item:last-child { border-bottom: none; }
+        
+        /* Form Styles */
+        .form-group { margin: 20px 0; }
+        .form-label { display: block; margin-bottom: 8px; color: #4da6ff; font-weight: 600; }
+        .form-input { width: 100%; padding: 12px; background: rgba(0,40,80,.5); border: 2px solid rgba(77,166,255,.3); border-radius: 8px; color: #fff; font-size: 14px; }
+        .form-input:focus { outline: none; border-color: #4da6ff; }
+        .form-btn { padding: 12px 24px; background: linear-gradient(135deg, #4da6ff 0%, #667eea 100%); border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .3s; }
+        .form-btn:hover { transform: translateY(-2px); }
+        .form-btn:disabled { opacity: .5; cursor: not-allowed; }
+        
+        /* Alert */
+        .alert { padding: 12px 20px; border-radius: 8px; margin: 15px 0; font-size: 14px; }
+        .alert-success { background: rgba(81,207,102,.2); border: 1px solid #51cf66; color: #51cf66; }
+        .alert-error { background: rgba(255,107,107,.2); border: 1px solid #ff6b6b; color: #ff6b6b; }
+        .alert-info { background: rgba(77,166,255,.2); border: 1px solid #4da6ff; color: #4da6ff; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="header-title">Network Dashboard v5.2.2</div>
+        <div class="header-title">Network Dashboard v5.2.4</div>
         <div class="header-actions">
             <div class="status-indicator">
                 <div class="status-dot"></div>
                 <span id="lastUpdate">Loading...</span>
             </div>
-            <button class="header-btn" id="deviceDetailsBtn"><i class="fas fa-list"></i><span>Devices</span></button>
-            <button class="header-btn" id="speedTestBtn"><i class="fas fa-gauge-high"></i><span>Speed Test</span></button>
+            <button class="header-btn" onclick="showDevices()"><i class="fas fa-list"></i><span>Devices</span></button>
+            <button class="header-btn" onclick="openModal('speedtestModal')"><i class="fas fa-gauge-high"></i><span>Speed Test</span></button>
         </div>
     </div>
+    
     <div class="dashboard-container">
         <div class="chart-card">
             <div class="chart-title">Connected Users</div>
@@ -1047,37 +1105,482 @@ def create_frontend():
             <div class="chart-container"><canvas id="signalStrengthChart"></canvas></div>
         </div>
     </div>
-    <div class="pi-icon" id="piIcon">π</div>
+    
+    <div class="pi-icon" onclick="showAdmin()">π</div>
+    
+    <!-- Devices Modal -->
+    <div id="devicesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Connected Devices</h2>
+                <button class="modal-close" onclick="closeModal('devicesModal')">&times;</button>
+            </div>
+            <div id="devicesList" class="device-grid"></div>
+        </div>
+    </div>
+    
+    <!-- Speed Test Modal -->
+    <div id="speedtestModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Speed Test</h2>
+                <button class="modal-close" onclick="closeModal('speedtestModal')">&times;</button>
+            </div>
+            <div class="speedtest-content">
+                <button id="startSpeedtest" class="speedtest-btn" onclick="runSpeedTest()">Start Speed Test</button>
+                <div id="speedtestStatus"></div>
+                <div id="speedtestResults"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Admin Modal -->
+    <div id="adminModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Admin Panel</h2>
+                <button class="modal-close" onclick="closeModal('adminModal')">&times;</button>
+            </div>
+            <div class="admin-info" id="adminInfo"></div>
+            <div class="admin-menu">
+                <button class="admin-btn" onclick="checkForUpdates()">
+                    <i class="fas fa-sync"></i>
+                    <span>Check for Updates</span>
+                </button>
+                <button class="admin-btn" onclick="showNetworkIdForm()">
+                    <i class="fas fa-network-wired"></i>
+                    <span>Change Network ID</span>
+                </button>
+                <button class="admin-btn" onclick="showReauthorizeForm()">
+                    <i class="fas fa-key"></i>
+                    <span>Reauthorize API</span>
+                </button>
+                <button class="admin-btn" onclick="restartService()">
+                    <i class="fas fa-rotate-right"></i>
+                    <span>Restart Service</span>
+                </button>
+                <button class="admin-btn" onclick="rebootSystem()">
+                    <i class="fas fa-power-off"></i>
+                    <span>Reboot System</span>
+                </button>
+            </div>
+            <div id="adminFormContainer"></div>
+            <div id="adminAlerts"></div>
+        </div>
+    </div>
+    
     <script>
         let charts = {};
+        let speedtestInterval = null;
+        
+        // Chart initialization with maintainAspectRatio: false
         function initCharts() {
-            charts.users = new Chart(document.getElementById('usersChart').getContext('2d'), {type: 'line', data: {labels: [], datasets: [{label: 'Connected', data: [], borderColor: '#4da6ff', backgroundColor: 'rgba(77,166,255,0.1)', tension: 0.4, fill: true}]}});
-            charts.deviceOS = new Chart(document.getElementById('deviceOSChart').getContext('2d'), {type: 'doughnut', data: {labels: ['iOS','Android','Windows','Other'], datasets: [{data: [0,0,0,0], backgroundColor: ['#4da6ff','#51cf66','#74c0fc','#ffd43b']}]}});
-            charts.frequency = new Chart(document.getElementById('frequencyChart').getContext('2d'), {type: 'doughnut', data: {labels: ['2.4 GHz','5 GHz','6 GHz'], datasets: [{data: [0,0,0], backgroundColor: ['#ff922b','#4da6ff','#b197fc']}]}});
-            charts.signalStrength = new Chart(document.getElementById('signalStrengthChart').getContext('2d'), {type: 'line', data: {labels: [], datasets: [{label: 'Avg Signal', data: [], borderColor: '#51cf66', backgroundColor: 'rgba(81,207,102,0.1)', tension: 0.4, fill: true}]}});
+            const chartOptions = {
+                maintainAspectRatio: false,
+                responsive: true,
+                plugins: {
+                    legend: {
+                        labels: { color: '#fff' }
+                    }
+                }
+            };
+            
+            charts.users = new Chart(document.getElementById('usersChart').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Connected',
+                        data: [],
+                        borderColor: '#4da6ff',
+                        backgroundColor: 'rgba(77,166,255,0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: { ...chartOptions, scales: { y: { ticks: { color: '#fff' } }, x: { ticks: { color: '#fff' } } } }
+            });
+            
+            charts.deviceOS = new Chart(document.getElementById('deviceOSChart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['iOS','Android','Windows','Other'],
+                    datasets: [{
+                        data: [0,0,0,0],
+                        backgroundColor: ['#4da6ff','#51cf66','#74c0fc','#ffd43b']
+                    }]
+                },
+                options: chartOptions
+            });
+            
+            charts.frequency = new Chart(document.getElementById('frequencyChart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['2.4 GHz','5 GHz','6 GHz'],
+                    datasets: [{
+                        data: [0,0,0],
+                        backgroundColor: ['#ff922b','#4da6ff','#b197fc']
+                    }]
+                },
+                options: chartOptions
+            });
+            
+            charts.signalStrength = new Chart(document.getElementById('signalStrengthChart').getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Avg Signal',
+                        data: [],
+                        borderColor: '#51cf66',
+                        backgroundColor: 'rgba(81,207,102,0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: { ...chartOptions, scales: { y: { ticks: { color: '#fff' } }, x: { ticks: { color: '#fff' } } } }
+            });
         }
+        
         async function updateDashboard() {
             try {
                 const r = await fetch('/api/dashboard');
                 const d = await r.json();
+                
                 charts.users.data.labels = d.connected_users.map(e => new Date(e.timestamp).toLocaleTimeString());
                 charts.users.data.datasets[0].data = d.connected_users.map(e => e.count);
                 charts.users.update();
+                
                 const os = d.device_os || {};
                 charts.deviceOS.data.datasets[0].data = [os.iOS||0, os.Android||0, os.Windows||0, os.Other||0];
                 charts.deviceOS.update();
                 document.getElementById('deviceOsSubtitle').textContent = `${Object.values(os).reduce((a,b) => a+b, 0)} devices`;
+                
                 const fd = d.frequency_distribution || {};
                 charts.frequency.data.datasets[0].data = [fd['2.4GHz']||0, fd['5GHz']||0, fd['6GHz']||0];
                 charts.frequency.update();
                 document.getElementById('frequencySubtitle').textContent = `${(fd['2.4GHz']||0) + (fd['5GHz']||0) + (fd['6GHz']||0)} devices`;
+                
                 charts.signalStrength.data.labels = d.signal_strength_avg.map(e => new Date(e.timestamp).toLocaleTimeString());
                 charts.signalStrength.data.datasets[0].data = d.signal_strength_avg.map(e => e.avg_dbm);
                 charts.signalStrength.update();
+                
                 document.getElementById('lastUpdate').textContent = `Updated: ${new Date(d.last_update).toLocaleTimeString()}`;
-            } catch(e) { console.error(e); }
+            } catch(e) {
+                console.error('Dashboard update error:', e);
+            }
         }
-        window.addEventListener('load', () => { initCharts(); updateDashboard(); setInterval(updateDashboard, 60000); });
+        
+        // Modal functions
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+        
+        // Close modal on outside click
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.classList.remove('active');
+            }
+        }
+        
+        // Device details
+        async function showDevices() {
+            try {
+                const r = await fetch('/api/devices');
+                const data = await r.json();
+                const container = document.getElementById('devicesList');
+                
+                if (!data.devices || data.devices.length === 0) {
+                    container.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,.6);">No devices found</p>';
+                } else {
+                    container.innerHTML = data.devices.map(d => `
+                        <div class="device-item">
+                            <div class="device-name">${d.name}</div>
+                            <div class="device-info">
+                                <div class="device-info-item">
+                                    <span class="device-label">IP:</span>
+                                    <span class="device-value">${d.ip}</span>
+                                </div>
+                                <div class="device-info-item">
+                                    <span class="device-label">MAC:</span>
+                                    <span class="device-value">${d.mac}</span>
+                                </div>
+                                <div class="device-info-item">
+                                    <span class="device-label">Manufacturer:</span>
+                                    <span class="device-value">${d.manufacturer}</span>
+                                </div>
+                                <div class="device-info-item">
+                                    <span class="device-label">OS:</span>
+                                    <span class="device-value">${d.device_os}</span>
+                                </div>
+                                <div class="device-info-item">
+                                    <span class="device-label">Frequency:</span>
+                                    <span class="device-value">${d.frequency}</span>
+                                </div>
+                                <div class="device-info-item">
+                                    <span class="device-label">Signal:</span>
+                                    <span class="device-value">${d.signal_quality} (${d.signal_avg_dbm})</span>
+                                </div>
+                            </div>
+                            <div class="signal-bar">
+                                <div class="signal-fill" style="width: ${d.signal_avg}%"></div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                
+                openModal('devicesModal');
+            } catch(e) {
+                console.error('Error loading devices:', e);
+            }
+        }
+        
+        // Speed test
+        async function runSpeedTest() {
+            const btn = document.getElementById('startSpeedtest');
+            const status = document.getElementById('speedtestStatus');
+            const results = document.getElementById('speedtestResults');
+            
+            btn.disabled = true;
+            status.innerHTML = '<div class="spinner"></div><p>Running speed test...</p>';
+            results.innerHTML = '';
+            
+            try {
+                await fetch('/api/speedtest/start', { method: 'POST' });
+                
+                speedtestInterval = setInterval(async () => {
+                    const r = await fetch('/api/speedtest/status');
+                    const data = await r.json();
+                    
+                    if (!data.running && data.result) {
+                        clearInterval(speedtestInterval);
+                        btn.disabled = false;
+                        status.innerHTML = '';
+                        
+                        if (data.result.error) {
+                            results.innerHTML = `<div class="alert alert-error">Error: ${data.result.error}</div>`;
+                        } else {
+                            results.innerHTML = `
+                                <div class="speedtest-results">
+                                    <div class="speedtest-metric">
+                                        <div class="speedtest-label">Download</div>
+                                        <div class="speedtest-value">${data.result.download}<span class="speedtest-unit">Mbps</span></div>
+                                    </div>
+                                    <div class="speedtest-metric">
+                                        <div class="speedtest-label">Upload</div>
+                                        <div class="speedtest-value">${data.result.upload}<span class="speedtest-unit">Mbps</span></div>
+                                    </div>
+                                    <div class="speedtest-metric">
+                                        <div class="speedtest-label">Ping</div>
+                                        <div class="speedtest-value">${data.result.ping}<span class="speedtest-unit">ms</span></div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                }, 2000);
+            } catch(e) {
+                btn.disabled = false;
+                status.innerHTML = '';
+                results.innerHTML = `<div class="alert alert-error">Failed to start speed test</div>`;
+            }
+        }
+        
+        // Admin functions
+        async function showAdmin() {
+            await loadAdminInfo();
+            openModal('adminModal');
+        }
+        
+        async function loadAdminInfo() {
+            try {
+                const r = await fetch('/api/version');
+                const data = await r.json();
+                document.getElementById('adminInfo').innerHTML = `
+                    <div class="admin-info-item">
+                        <span>Version:</span>
+                        <span>${data.version}</span>
+                    </div>
+                    <div class="admin-info-item">
+                        <span>Network ID:</span>
+                        <span>${data.network_id}</span>
+                    </div>
+                    <div class="admin-info-item">
+                        <span>Environment:</span>
+                        <span>${data.environment}</span>
+                    </div>
+                    <div class="admin-info-item">
+                        <span>API URL:</span>
+                        <span>${data.api_url}</span>
+                    </div>
+                `;
+            } catch(e) {
+                console.error('Error loading admin info:', e);
+            }
+        }
+        
+        function showAlert(message, type = 'info') {
+            const alerts = document.getElementById('adminAlerts');
+            alerts.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => { alerts.innerHTML = ''; }, 5000);
+        }
+        
+        async function checkForUpdates() {
+            try {
+                const r = await fetch('/api/admin/check-update');
+                const data = await r.json();
+                
+                if (data.update_available) {
+                    if (confirm(`Update available: v${data.latest_version}\\nCurrent: v${data.current_version}\\n\\nUpdate now?`)) {
+                        const ur = await fetch('/api/admin/update', { method: 'POST' });
+                        const udata = await ur.json();
+                        showAlert(udata.message, udata.success ? 'success' : 'error');
+                        if (udata.success) {
+                            setTimeout(() => location.reload(), 3000);
+                        }
+                    }
+                } else {
+                    showAlert('You are running the latest version', 'success');
+                }
+            } catch(e) {
+                showAlert('Failed to check for updates', 'error');
+            }
+        }
+        
+        function showNetworkIdForm() {
+            document.getElementById('adminFormContainer').innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">New Network ID:</label>
+                    <input type="text" id="newNetworkId" class="form-input" placeholder="Enter network ID">
+                    <button class="form-btn" style="margin-top:10px" onclick="changeNetworkId()">Update Network ID</button>
+                </div>
+            `;
+        }
+        
+        async function changeNetworkId() {
+            const newId = document.getElementById('newNetworkId').value.trim();
+            if (!newId || !newId.match(/^\\d+$/)) {
+                showAlert('Invalid network ID', 'error');
+                return;
+            }
+            
+            try {
+                const r = await fetch('/api/admin/network-id', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ network_id: newId })
+                });
+                const data = await r.json();
+                showAlert(data.message, data.success ? 'success' : 'error');
+                if (data.success) {
+                    document.getElementById('adminFormContainer').innerHTML = '';
+                    setTimeout(() => location.reload(), 3000);
+                }
+            } catch(e) {
+                showAlert('Failed to update network ID', 'error');
+            }
+        }
+        
+        function showReauthorizeForm() {
+            document.getElementById('adminFormContainer').innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">Email:</label>
+                    <input type="email" id="authEmail" class="form-input" placeholder="Enter email">
+                    <button class="form-btn" style="margin-top:10px" onclick="sendAuthCode()">Send Code</button>
+                </div>
+                <div id="codeFormContainer"></div>
+            `;
+        }
+        
+        async function sendAuthCode() {
+            const email = document.getElementById('authEmail').value.trim();
+            if (!email || !email.includes('@')) {
+                showAlert('Invalid email', 'error');
+                return;
+            }
+            
+            try {
+                const r = await fetch('/api/admin/reauthorize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ step: 'send', email })
+                });
+                const data = await r.json();
+                showAlert(data.message, data.success ? 'success' : 'error');
+                
+                if (data.success) {
+                    document.getElementById('codeFormContainer').innerHTML = `
+                        <div class="form-group">
+                            <label class="form-label">Verification Code:</label>
+                            <input type="text" id="authCode" class="form-input" placeholder="Enter code from email">
+                            <button class="form-btn" style="margin-top:10px" onclick="verifyAuthCode()">Verify</button>
+                        </div>
+                    `;
+                }
+            } catch(e) {
+                showAlert('Failed to send code', 'error');
+            }
+        }
+        
+        async function verifyAuthCode() {
+            const code = document.getElementById('authCode').value.trim();
+            if (!code) {
+                showAlert('Code required', 'error');
+                return;
+            }
+            
+            try {
+                const r = await fetch('/api/admin/reauthorize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ step: 'verify', code })
+                });
+                const data = await r.json();
+                showAlert(data.message, data.success ? 'success' : 'error');
+                if (data.success) {
+                    document.getElementById('adminFormContainer').innerHTML = '';
+                    document.getElementById('codeFormContainer').innerHTML = '';
+                }
+            } catch(e) {
+                showAlert('Failed to verify code', 'error');
+            }
+        }
+        
+        async function restartService() {
+            if (!confirm('Restart the dashboard service?')) return;
+            try {
+                const r = await fetch('/api/admin/restart', { method: 'POST' });
+                const data = await r.json();
+                showAlert(data.message, data.success ? 'success' : 'error');
+                if (data.success) {
+                    setTimeout(() => location.reload(), 3000);
+                }
+            } catch(e) {
+                showAlert('Failed to restart service', 'error');
+            }
+        }
+        
+        async function rebootSystem() {
+            if (!confirm('Reboot the entire system? This will take a few minutes.')) return;
+            try {
+                const r = await fetch('/api/admin/reboot', { method: 'POST' });
+                const data = await r.json();
+                showAlert('System is rebooting...', 'info');
+                closeModal('adminModal');
+            } catch(e) {
+                showAlert('Failed to reboot system', 'error');
+            }
+        }
+        
+        window.addEventListener('load', () => { 
+            initCharts(); 
+            updateDashboard(); 
+            setInterval(updateDashboard, 60000); 
+        });
     </script>
 </body>
 </html>
@@ -1092,7 +1595,7 @@ def create_frontend():
 def create_service():
     print_info("Creating service...")
     svc = f"""[Unit]
-Description=Eero Dashboard v5.2.2
+Description=Eero Dashboard v5.2.4
 After=network.target
 
 [Service]
@@ -1166,7 +1669,7 @@ def setup_logs():
 
 def main():
     os.system('clear')
-    print_header(f"Eero Dashboard v5.2.2 Installer - v{SCRIPT_VERSION}")
+    print_header(f"Eero Dashboard v5.2.4 Installer - v{SCRIPT_VERSION}")
     
     # Check if this is an existing installation
     if os.path.exists(f"{INSTALL_DIR}/backend/eero_api.py"):
