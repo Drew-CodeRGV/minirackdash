@@ -122,7 +122,6 @@ def check_port_80():
             print_color(Colors.YELLOW, "\nWould you like to stop services using port 80? (yes/no): ")
             response = input().strip().lower()
             if response in ['yes', 'y']:
-                # Try to stop common services
                 for service in ['apache2', 'nginx', 'lighttpd']:
                     subprocess.run(['systemctl', 'stop', service], capture_output=True)
                     subprocess.run(['systemctl', 'disable', service], capture_output=True)
@@ -135,7 +134,6 @@ def check_port_80():
             print_success("Port 80 is available")
             return True
     except FileNotFoundError:
-        # lsof not installed, assume port is free
         print_warning("Cannot check port (lsof not installed), continuing...")
         return True
 
@@ -283,13 +281,10 @@ def force_update_from_cloud():
             print_info(f"Downloaded version: v{latest_version}")
         
         current_script = os.path.abspath(__file__)
-        
-        # Create backup
         backup_path = f"{current_script}.backup"
         shutil.copy2(current_script, backup_path)
         print_info(f"Backup created: {backup_path}")
         
-        # Write new version
         with open(current_script, 'w') as f:
             f.write(latest_script)
         os.chmod(current_script, 0o755)
@@ -297,8 +292,6 @@ def force_update_from_cloud():
         print_success(f"Script updated to v{latest_version}!")
         print_info("Restarting with new version...")
         time.sleep(1)
-        
-        # Restart with new version
         os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
         
     except Exception as e:
@@ -332,7 +325,6 @@ def check_for_updates():
     except Exception as e:
         print_warning(f"Could not check for updates: {e}")
     
-    # Force update prompt (always shown after version check)
     print()
     print_color(Colors.CYAN, "Would you like to force update from the cloud?")
     response = input_with_timeout("(yes/no): ", 3, default="no")
@@ -385,9 +377,12 @@ def setup_python():
     run_command(f'sudo -u {USER} {INSTALL_DIR}/venv/bin/pip install --upgrade pip', timeout=120)
     run_command(f'sudo -u {USER} {INSTALL_DIR}/venv/bin/pip install flask flask-cors requests speedtest-cli', timeout=300, show=True)
     print_success("Python environment ready")
-    def create_backend_api(network_id, api_url):
+
+def create_backend_api(network_id, api_url):
     print_info("Creating backend...")
-    code = f'''#!/usr/bin/env python3
+    
+    # Write backend code to file
+    backend_code = """#!/usr/bin/env python3
 import os
 import sys
 import json
@@ -404,14 +399,12 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import logging
 
-# Setup logging
 logging.basicConfig(
     filename='/home/eero/dashboard/logs/backend.log',
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Also log to console
 console = logging.StreamHandler()
 console.setLevel(logging.INFO)
 logging.getLogger('').addHandler(console)
@@ -419,15 +412,14 @@ logging.getLogger('').addHandler(console)
 app = Flask(__name__, static_folder='/home/eero/dashboard/frontend', static_url_path='')
 CORS(app)
 
-NETWORK_ID = "{network_id}"
+NETWORK_ID = "REPLACE_NETWORK_ID"
 API_TOKEN_FILE = "/home/eero/dashboard/.eero_token"
 CONFIG_FILE = "/home/eero/dashboard/.config.json"
-GITHUB_RAW = "https://raw.githubusercontent.com/{GITHUB_REPO}/main"
-SCRIPT_URL_V5 = f"{{GITHUB_RAW}}/v5/init_dashboard.py"
+GITHUB_RAW = "https://raw.githubusercontent.com/REPLACE_REPO/main"
+SCRIPT_URL_V5 = f"{GITHUB_RAW}/v5/init_dashboard.py"
 CURRENT_VERSION = "5.2.1"
 
 def check_port_available(port):
-    """Check if a port is available"""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.bind(('0.0.0.0', port))
@@ -442,8 +434,8 @@ def load_config():
             with open(CONFIG_FILE, 'r') as f:
                 return json.load(f)
     except Exception as e:
-        logging.error(f"Config load error: {{e}}")
-    return {{}}
+        logging.error(f"Config load error: {e}")
+    return {}
 
 def save_config(config):
     try:
@@ -452,7 +444,7 @@ def save_config(config):
         os.chmod(CONFIG_FILE, 0o600)
         return True
     except Exception as e:
-        logging.error(f"Config save error: {{e}}")
+        logging.error(f"Config save error: {e}")
         return False
 
 def get_api_url():
@@ -465,8 +457,8 @@ class EeroAPI:
         self.api_token = self.load_token()
         self.network_id = self.load_network_id()
         self.api_url = get_api_url()
-        self.api_base = f"https://{{self.api_url}}/2.2"
-        logging.info(f"EeroAPI initialized with {{self.api_url}}")
+        self.api_base = f"https://{self.api_url}/2.2"
+        logging.info(f"EeroAPI initialized with {self.api_url}")
     
     def load_token(self):
         try:
@@ -474,7 +466,7 @@ class EeroAPI:
                 with open(API_TOKEN_FILE, 'r') as f:
                     return f.read().strip()
         except Exception as e:
-            logging.error(f"Token load error: {{e}}")
+            logging.error(f"Token load error: {e}")
         return None
     
     def load_network_id(self):
@@ -489,17 +481,17 @@ class EeroAPI:
     
     def reload_api_url(self):
         self.api_url = get_api_url()
-        self.api_base = f"https://{{self.api_url}}/2.2"
+        self.api_base = f"https://{self.api_url}/2.2"
     
     def get_headers(self):
-        headers = {{'Content-Type': 'application/json', 'User-Agent': 'Eero-Dashboard/5.2.1'}}
+        headers = {'Content-Type': 'application/json', 'User-Agent': 'Eero-Dashboard/5.2.1'}
         if self.api_token:
             headers['X-User-Token'] = self.api_token
         return headers
     
     def get_all_devices(self):
         try:
-            url = f"{{self.api_base}}/networks/{{self.network_id}}/devices"
+            url = f"{self.api_base}/networks/{self.network_id}/devices"
             response = self.session.get(url, headers=self.get_headers(), timeout=10)
             response.raise_for_status()
             devices_data = response.json()
@@ -510,7 +502,7 @@ class EeroAPI:
                     return devices_data['data']['devices']
             return []
         except Exception as e:
-            logging.error(f"Device fetch error: {{e}}")
+            logging.error(f"Device fetch error: {e}")
             return []
 
 def safe_str(v, d=''):
@@ -520,7 +512,7 @@ def safe_lower(v, d=''):
     return d if v is None else str(v).lower()
 
 def categorize_device_os(device):
-    all_text = f"{{safe_lower(device.get('manufacturer'))}} {{safe_lower(device.get('device_type'))}} {{safe_lower(device.get('hostname'))}} {{safe_lower(device.get('model_name'))}} {{safe_lower(device.get('display_name'))}}"
+    all_text = f"{safe_lower(device.get('manufacturer'))} {safe_lower(device.get('device_type'))} {safe_lower(device.get('hostname'))} {safe_lower(device.get('model_name'))} {safe_lower(device.get('display_name'))}"
     for k in ['apple', 'iphone', 'ipad', 'mac', 'macbook', 'ios']:
         if k in all_text:
             return 'iOS'
@@ -533,7 +525,7 @@ def categorize_device_os(device):
     return 'Other'
 
 def estimate_signal_from_bars(s):
-    return {{5: -45, 4: -55, 3: -65, 2: -75, 1: -85, 0: -90}}.get(s, -90)
+    return {5: -45, 4: -55, 3: -65, 2: -75, 1: -85, 0: -90}.get(s, -90)
 
 def get_signal_quality(s):
     if s is None:
@@ -584,7 +576,7 @@ def parse_frequency(i):
             band = '6GHz'
         else:
             band = 'Unknown'
-        return f"{{freq}} GHz", band
+        return f"{freq} GHz", band
     except:
         return 'N/A', 'Unknown'
 
@@ -604,24 +596,23 @@ def compare_versions(v1, v2):
             return -1
     return 0
 
-# Initialize API
 try:
     eero_api = EeroAPI()
     logging.info("Eero API initialized successfully")
 except Exception as e:
-    logging.error(f"Failed to initialize Eero API: {{e}}")
+    logging.error(f"Failed to initialize Eero API: {e}")
     sys.exit(1)
 
-data_cache = {{
+data_cache = {
     'connected_users': [],
-    'device_os': {{}},
-    'frequency_distribution': {{}},
+    'device_os': {},
+    'frequency_distribution': {},
     'signal_strength_avg': [],
     'devices': [],
     'last_update': None,
     'speedtest_running': False,
     'speedtest_result': None
-}}
+}
 
 def update_cache():
     global data_cache
@@ -634,12 +625,12 @@ def update_cache():
         wireless = [d for d in all_devices if d.get('connected') and (safe_lower(d.get('connection_type')) == 'wireless' or d.get('wireless'))]
         ct = datetime.now()
         
-        data_cache['connected_users'].append({{'timestamp': ct.isoformat(), 'count': len(wireless)}})
+        data_cache['connected_users'].append({'timestamp': ct.isoformat(), 'count': len(wireless)})
         two_hours_ago = ct - timedelta(hours=2)
         data_cache['connected_users'] = [e for e in data_cache['connected_users'] if datetime.fromisoformat(e['timestamp']) > two_hours_ago]
         
-        device_os = {{'iOS': 0, 'Android': 0, 'Windows': 0, 'Other': 0}}
-        freq_dist = {{'2.4GHz': 0, '5GHz': 0, '6GHz': 0, 'Unknown': 0}}
+        device_os = {'iOS': 0, 'Android': 0, 'Windows': 0, 'Other': 0}
+        freq_dist = {'2.4GHz': 0, '5GHz': 0, '6GHz': 0, 'Unknown': 0}
         signals = []
         device_list = []
         
@@ -647,8 +638,8 @@ def update_cache():
             os_type = categorize_device_os(device)
             device_os[os_type] += 1
             
-            conn = device.get('connectivity', {{}}) or {{}}
-            iface = device.get('interface', {{}}) or {{}}
+            conn = device.get('connectivity', {}) or {}
+            iface = device.get('interface', {}) or {}
             freq_display, freq_band = parse_frequency(iface)
             
             if freq_band in freq_dist:
@@ -668,19 +659,19 @@ def update_cache():
                 except:
                     pass
             
-            device_list.append({{
+            device_list.append({
                 'name': safe_str(device.get('nickname') or device.get('hostname') or device.get('display_name') or 'Unknown'),
                 'ip': ', '.join(device.get('ips', [])) if device.get('ips') else 'N/A',
                 'mac': safe_str(device.get('mac'), 'N/A'),
                 'manufacturer': safe_str(device.get('manufacturer'), 'Unknown'),
                 'signal_avg': sig_pct,
-                'signal_avg_dbm': f"{{sig_dbm}} dBm" if sig_dbm else 'N/A',
+                'signal_avg_dbm': f"{sig_dbm} dBm" if sig_dbm else 'N/A',
                 'score_bars': score_bars,
                 'signal_quality': get_signal_quality(score_bars),
                 'device_os': os_type,
                 'frequency': freq_display,
                 'frequency_band': freq_band
-            }})
+            })
         
         data_cache['device_os'] = device_os
         data_cache['frequency_distribution'] = freq_dist
@@ -688,13 +679,13 @@ def update_cache():
         
         if signals:
             avg = sum(signals) / len(signals)
-            data_cache['signal_strength_avg'].append({{'timestamp': ct.isoformat(), 'avg_dbm': round(avg, 2)}})
+            data_cache['signal_strength_avg'].append({'timestamp': ct.isoformat(), 'avg_dbm': round(avg, 2)})
             data_cache['signal_strength_avg'] = [e for e in data_cache['signal_strength_avg'] if datetime.fromisoformat(e['timestamp']) > two_hours_ago]
         
         data_cache['last_update'] = ct.isoformat()
-        logging.info(f"Cache updated: {{len(wireless)}} wireless devices")
+        logging.info(f"Cache updated: {len(wireless)} wireless devices")
     except Exception as e:
-        logging.error(f"Cache update error: {{e}}")
+        logging.error(f"Cache update error: {e}")
 
 def run_speedtest():
     global data_cache
@@ -703,16 +694,16 @@ def run_speedtest():
         logging.info("Starting speedtest")
         st = speedtest.Speedtest()
         st.get_best_server()
-        data_cache['speedtest_result'] = {{
+        data_cache['speedtest_result'] = {
             'download': round(st.download() / 1_000_000, 2),
             'upload': round(st.upload() / 1_000_000, 2),
             'ping': round(st.results.ping, 2),
             'timestamp': datetime.now().isoformat()
-        }}
-        logging.info(f"Speedtest complete: {{data_cache['speedtest_result']}}")
+        }
+        logging.info(f"Speedtest complete: {data_cache['speedtest_result']}")
     except Exception as e:
-        logging.error(f"Speedtest error: {{e}}")
-        data_cache['speedtest_result'] = {{'error': str(e)}}
+        logging.error(f"Speedtest error: {e}")
+        data_cache['speedtest_result'] = {'error': str(e)}
     finally:
         data_cache['speedtest_running'] = False
 
@@ -731,34 +722,34 @@ def get_dashboard_data():
 
 @app.route('/api/devices')
 def get_devices():
-    return jsonify({{'devices': data_cache.get('devices', []), 'count': len(data_cache.get('devices', []))}})
+    return jsonify({'devices': data_cache.get('devices', []), 'count': len(data_cache.get('devices', []))})
 
 @app.route('/api/speedtest/start', methods=['POST'])
 def start_speedtest():
     if data_cache['speedtest_running']:
-        return jsonify({{'status': 'running'}}), 409
+        return jsonify({'status': 'running'}), 409
     threading.Thread(target=run_speedtest, daemon=True).start()
-    return jsonify({{'status': 'started'}})
+    return jsonify({'status': 'started'})
 
 @app.route('/api/speedtest/status')
 def get_speedtest_status():
-    return jsonify({{'running': data_cache['speedtest_running'], 'result': data_cache['speedtest_result']}})
+    return jsonify({'running': data_cache['speedtest_running'], 'result': data_cache['speedtest_result']})
 
 @app.route('/api/health')
 def health_check():
-    return jsonify({{'status': 'ok', 'timestamp': datetime.now().isoformat()}})
+    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()})
 
 @app.route('/api/version')
 def get_version():
     config = load_config()
     env = config.get('environment', 'staging')
-    return jsonify({{
+    return jsonify({
         'version': CURRENT_VERSION,
         'name': 'Eero Dashboard',
         'network_id': config.get('network_id', eero_api.network_id),
         'environment': env,
         'api_url': config.get('api_url', 'api-user.stage.e2ro.com')
-    }})
+    })
 
 @app.route('/api/admin/check-update')
 def check_update():
@@ -766,13 +757,13 @@ def check_update():
         with urllib.request.urlopen(SCRIPT_URL_V5, timeout=10) as r:
             latest_script = r.read().decode('utf-8')
         latest_version = extract_version_from_script(latest_script)
-        return jsonify({{
+        return jsonify({
             'current_version': CURRENT_VERSION,
             'latest_version': latest_version or CURRENT_VERSION,
             'update_available': compare_versions(latest_version or CURRENT_VERSION, CURRENT_VERSION) > 0
-        }})
+        })
     except:
-        return jsonify({{'current_version': CURRENT_VERSION, 'latest_version': CURRENT_VERSION, 'update_available': False}})
+        return jsonify({'current_version': CURRENT_VERSION, 'latest_version': CURRENT_VERSION, 'update_available': False})
 
 @app.route('/api/admin/update', methods=['POST'])
 def update_system():
@@ -781,33 +772,33 @@ def update_system():
             latest_script = r.read().decode('utf-8')
         latest_version = extract_version_from_script(latest_script)
         if not latest_version or compare_versions(latest_version, CURRENT_VERSION) <= 0:
-            return jsonify({{'success': False, 'message': 'Already latest'}})
+            return jsonify({'success': False, 'message': 'Already latest'})
         script_path = '/root/init_dashboard.py'
         if not os.path.exists(script_path):
             script_path = os.path.abspath(sys.argv[0])
-        with open(f"{{script_path}}.backup", 'w') as f:
+        with open(f"{script_path}.backup", 'w') as f:
             with open(script_path, 'r') as o:
                 f.write(o.read())
         with open(script_path, 'w') as f:
             f.write(latest_script)
         os.chmod(script_path, 0o755)
         subprocess.Popen(['/usr/bin/sudo', '/usr/bin/python3', script_path, '--no-update'])
-        return jsonify({{'success': True, 'message': f'Updated to v{{latest_version}}'}})
+        return jsonify({'success': True, 'message': f'Updated to v{latest_version}'})
     except Exception as e:
-        return jsonify({{'success': False, 'message': str(e)}}), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/admin/restart', methods=['POST'])
 def restart_service():
     try:
         r = subprocess.run(['sudo', 'systemctl', 'restart', 'eero-dashboard'], capture_output=True, timeout=10)
-        return jsonify({{'success': r.returncode == 0, 'message': 'Service restarted' if r.returncode == 0 else 'Failed'}})
+        return jsonify({'success': r.returncode == 0, 'message': 'Service restarted' if r.returncode == 0 else 'Failed'})
     except Exception as e:
-        return jsonify({{'success': False, 'message': str(e)}}), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/admin/reboot', methods=['POST'])
 def reboot_system():
     subprocess.Popen(['sudo', 'reboot'])
-    return jsonify({{'success': True, 'message': 'Rebooting'}})
+    return jsonify({'success': True, 'message': 'Rebooting'})
 
 @app.route('/api/admin/network-id', methods=['POST'])
 def change_network_id():
@@ -815,17 +806,17 @@ def change_network_id():
         data = request.get_json()
         new_id = data.get('network_id', '').strip()
         if not new_id or not new_id.isdigit():
-            return jsonify({{'success': False, 'message': 'Invalid ID'}}), 400
+            return jsonify({'success': False, 'message': 'Invalid ID'}), 400
         config = load_config()
         config['network_id'] = new_id
         config['last_updated'] = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
         if save_config(config):
             eero_api.reload_network_id()
             subprocess.Popen(['sudo', 'systemctl', 'restart', 'eero-dashboard'])
-            return jsonify({{'success': True, 'message': f'Updated to {{new_id}}'}})
-        return jsonify({{'success': False, 'message': 'Save failed'}}), 500
+            return jsonify({'success': True, 'message': f'Updated to {new_id}'})
+        return jsonify({'success': False, 'message': 'Save failed'}), 500
     except Exception as e:
-        return jsonify({{'success': False, 'message': str(e)}}), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/admin/reauthorize', methods=['POST'])
 def reauthorize():
@@ -838,44 +829,43 @@ def reauthorize():
         
         if step == 'send':
             if not email or '@' not in email:
-                return jsonify({{'success': False, 'message': 'Invalid email'}}), 400
-            r = requests.post(f"https://{{api_url}}/2.2/pro/login", json={{"login": email}}, timeout=10)
+                return jsonify({'success': False, 'message': 'Invalid email'}), 400
+            r = requests.post(f"https://{api_url}/2.2/pro/login", json={"login": email}, timeout=10)
             r.raise_for_status()
             rd = r.json()
             if 'data' not in rd or 'user_token' not in rd['data']:
-                return jsonify({{'success': False, 'message': 'Token gen failed'}}), 500
+                return jsonify({'success': False, 'message': 'Token gen failed'}), 500
             with open(API_TOKEN_FILE + '.temp', 'w') as f:
                 f.write(rd['data']['user_token'])
-            return jsonify({{'success': True, 'message': 'Code sent', 'step': 'verify'}})
+            return jsonify({'success': True, 'message': 'Code sent', 'step': 'verify'})
         elif step == 'verify':
             if not code:
-                return jsonify({{'success': False, 'message': 'Code required'}}), 400
+                return jsonify({'success': False, 'message': 'Code required'}), 400
             if not os.path.exists(API_TOKEN_FILE + '.temp'):
-                return jsonify({{'success': False, 'message': 'Restart process'}}), 400
+                return jsonify({'success': False, 'message': 'Restart process'}), 400
             with open(API_TOKEN_FILE + '.temp', 'r') as f:
                 token = f.read().strip()
-            vr = requests.post(f"https://{{api_url}}/2.2/login/verify", headers={{"X-User-Token": token}}, data={{"code": code}}, timeout=10)
+            vr = requests.post(f"https://{api_url}/2.2/login/verify", headers={"X-User-Token": token}, data={"code": code}, timeout=10)
             vr.raise_for_status()
             vd = vr.json()
-            if vd.get('data', {{}}).get('email', {{}}).get('verified'):
+            if vd.get('data', {}).get('email', {}).get('verified'):
                 with open(API_TOKEN_FILE, 'w') as f:
                     f.write(token)
                 os.chmod(API_TOKEN_FILE, 0o600)
                 if os.path.exists(API_TOKEN_FILE + '.temp'):
                     os.remove(API_TOKEN_FILE + '.temp')
                 eero_api.reload_token()
-                return jsonify({{'success': True, 'message': 'Reauthorized!'}})
-            return jsonify({{'success': False, 'message': 'Verification failed'}}), 400
+                return jsonify({'success': True, 'message': 'Reauthorized!'})
+            return jsonify({'success': False, 'message': 'Verification failed'}), 400
     except Exception as e:
-        return jsonify({{'success': False, 'message': str(e)}}), 500
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 if __name__ == '__main__':
     logging.info("=" * 60)
     logging.info("Starting Eero Dashboard Backend v5.2.1")
-    logging.info(f"API URL: {{eero_api.api_url}}")
-    logging.info(f"Network ID: {{eero_api.network_id}}")
+    logging.info(f"API URL: {eero_api.api_url}")
+    logging.info(f"Network ID: {eero_api.network_id}")
     
-    # Check if port 80 is available
     if not check_port_available(80):
         logging.error("Port 80 is not available!")
         logging.error("Another service may be using it. Please stop other web servers.")
@@ -888,7 +878,7 @@ if __name__ == '__main__':
         update_cache()
         logging.info("Initial cache update complete")
     except Exception as e:
-        logging.error(f"Initial cache update failed: {{e}}")
+        logging.error(f"Initial cache update failed: {e}")
     
     logging.info("Starting Flask server on 0.0.0.0:80")
     logging.info("=" * 60)
@@ -896,18 +886,25 @@ if __name__ == '__main__':
     try:
         app.run(host='0.0.0.0', port=80, debug=False, threaded=True)
     except Exception as e:
-        logging.error(f"Failed to start server: {{e}}")
+        logging.error(f"Failed to start server: {e}")
         sys.exit(1)
-'''
+"""
+    
+    # Replace placeholders
+    backend_code = backend_code.replace("REPLACE_NETWORK_ID", network_id)
+    backend_code = backend_code.replace("REPLACE_REPO", GITHUB_REPO)
+    
     with open(f"{INSTALL_DIR}/backend/eero_api.py", 'w') as f:
-        f.write(code)
+        f.write(backend_code)
+    
     os.chmod(f"{INSTALL_DIR}/backend/eero_api.py", 0o755)
     run_command(f'chown {USER}:{USER} {INSTALL_DIR}/backend/eero_api.py')
     print_success("Backend created")
-    def create_frontend():
+
+def create_frontend():
     print_info("Creating frontend...")
-    html = open('/tmp/frontend.html', 'w')
-    html.write('''<!DOCTYPE html>
+    
+    frontend_html = """<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -927,75 +924,15 @@ if __name__ == '__main__':
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
         .pi-icon { position: fixed; bottom: 20px; right: 20px; width: 30px; height: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 20px rgba(102,126,234,.4); transition: all .3s; z-index: 999; font-size: 16px; font-weight: 700; color: #fff; border: 2px solid rgba(255,255,255,.3); }
         .pi-icon:hover { transform: scale(1.1) rotate(180deg); }
-        .pixelate-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: repeating-conic-gradient(rgba(0,0,0,.7) 0% 25%, rgba(0,0,0,.5) 0% 50%) 0 0/20px 20px; z-index: 998; pointer-events: none; opacity: 0; transition: opacity .3s; }
-        .pixelate-overlay.active { opacity: 1; }
         .dashboard-container { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; padding: 10px; height: calc(100vh - 60px); }
         .chart-card { background: rgba(0,40,80,.7); border-radius: 10px; padding: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.1); display: flex; flex-direction: column; }
         .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; text-align: center; color: #4da6ff; text-transform: uppercase; }
         .chart-subtitle { font-size: 11px; text-align: center; color: rgba(255,255,255,.6); margin-bottom: 8px; }
         .chart-container { flex: 1; position: relative; min-height: 0; }
         canvas { max-width: 100%; max-height: 100%; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,.8); z-index: 1000; justify-content: center; align-items: center; }
-        .modal.active { display: flex; }
-        .modal-content { background: linear-gradient(135deg, #001a33 0%, #003366 100%); border-radius: 15px; padding: 30px; max-width: 900px; width: 90%; max-height: 80vh; overflow-y: auto; border: 2px solid rgba(77,166,255,.3); }
-        .gibson-modal .modal-content { max-width: 600px; background: linear-gradient(135deg, #0a0e27 0%, #1a1a2e 100%); border: 2px solid #667eea; }
-        .gibson-title { font-size: 32px; color: #667eea; text-align: center; margin-bottom: 10px; font-weight: 700; text-shadow: 0 0 20px rgba(102,126,234,.5); letter-spacing: 2px; }
-        .gibson-subtitle { text-align: center; color: rgba(255,255,255,.6); font-size: 12px; margin-bottom: 30px; font-style: italic; }
-        .version-info { background: rgba(0,0,0,.3); padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid rgba(102,126,234,.3); }
-        .version-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
-        .version-label { color: #667eea; font-weight: 600; }
-        .version-value { color: #fff; font-family: 'Courier New', monospace; }
-        .env-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-left: 10px; }
-        .env-production { background: rgba(76,175,80,.3); color: #4CAF50; border: 1px solid #4CAF50; }
-        .env-staging { background: rgba(255,193,7,.3); color: #ffc107; border: 1px solid #ffc107; }
-        .version-status { text-align: center; padding: 10px; border-radius: 8px; margin-top: 15px; font-weight: 600; }
-        .version-status.up-to-date { background: rgba(76,175,80,.2); color: #4CAF50; border: 1px solid #4CAF50; }
-        .version-status.update-available { background: rgba(255,193,7,.2); color: #ffc107; border: 1px solid #ffc107; }
-        .admin-actions { display: grid; gap: 15px; margin-top: 20px; }
-        .admin-btn { padding: 15px 20px; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all .3s; }
-        .admin-btn:hover { transform: translateY(-2px); }
-        .admin-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-        .admin-btn.update { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
-        .admin-btn.restart { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: #fff; }
-        .admin-btn.reboot { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: #1a1a2e; }
-        .admin-btn.network { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: #fff; }
-        .admin-btn.auth { background: linear-gradient(135deg, #ffc837 0%, #ff8008 100%); color: #fff; }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid rgba(77,166,255,.3); }
-        .modal-title { font-size: 24px; color: #4da6ff; }
-        .close-btn { background: transparent; border: none; color: #fff; font-size: 28px; cursor: pointer; }
-        .close-btn:hover { color: #ff6b6b; }
-        .device-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        .device-table th { background: rgba(77,166,255,.2); padding: 12px; text-align: left; font-weight: 600; color: #4da6ff; border-bottom: 2px solid rgba(77,166,255,.3); }
-        .device-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,.1); }
-        .device-table tr:hover { background: rgba(77,166,255,.1); }
-        .signal-bar { width: 100px; height: 8px; background: rgba(255,255,255,.1); border-radius: 4px; overflow: hidden; }
-        .signal-fill { height: 100%; border-radius: 4px; }
-        .signal-excellent { background: #4CAF50; }
-        .signal-good { background: #8BC34A; }
-        .signal-fair { background: #FFC107; }
-        .signal-poor { background: #FF9800; }
-        .signal-weak { background: #F44336; }
-        .speedtest-container { text-align: center; padding: 20px; }
-        .speedtest-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 30px; }
-        .speedtest-metric { background: rgba(0,40,80,.5); padding: 25px; border-radius: 10px; }
-        .speedtest-metric-label { font-size: 14px; color: #4da6ff; margin-bottom: 10px; }
-        .speedtest-metric-value { font-size: 36px; font-weight: 600; color: #fff; }
-        .speedtest-metric-unit { font-size: 14px; color: rgba(255,255,255,.7); }
-        .spinner { border: 4px solid rgba(77,166,255,.3); border-top: 4px solid #4da6ff; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 20px auto; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .device-count { font-size: 16px; color: rgba(255,255,255,.8); margin-bottom: 15px; }
-        .action-message { padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; font-weight: 600; }
-        .action-message.success { background: rgba(76,175,80,.2); color: #4CAF50; border: 1px solid #4CAF50; }
-        .action-message.error { background: rgba(244,67,54,.2); color: #f44336; border: 1px solid #f44336; }
-        .action-message.info { background: rgba(77,166,255,.2); color: #4da6ff; border: 1px solid #4da6ff; }
-        .input-group { margin: 20px 0; }
-        .input-group label { display: block; color: #667eea; font-weight: 600; margin-bottom: 10px; font-size: 14px; }
-        .input-group input { width: 100%; padding: 12px; background: rgba(0,0,0,.3); border: 2px solid rgba(102,126,234,.3); border-radius: 8px; color: #fff; font-size: 16px; font-family: 'Courier New', monospace; }
-        .input-group input:focus { outline: none; border-color: #667eea; }
     </style>
 </head>
 <body>
-    <div class="pixelate-overlay" id="pixelateOverlay"></div>
     <div class="header">
         <div class="header-title">Network Dashboard v5.2.1</div>
         <div class="header-actions">
@@ -1030,134 +967,14 @@ if __name__ == '__main__':
         </div>
     </div>
     <div class="pi-icon" id="piIcon">π</div>
-    
-    <!-- Modals -->
-    <div class="modal gibson-modal" id="gibsonModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="gibson-title">THE GIBSON</h2>
-                <button class="close-btn" id="closeGibsonModal">&times;</button>
-            </div>
-            <div class="gibson-subtitle">"Hack the Planet!"</div>
-            <div class="version-info">
-                <div class="version-row"><span class="version-label">Current:</span><span class="version-value" id="currentVersion">Loading...</span></div>
-                <div class="version-row"><span class="version-label">Latest:</span><span class="version-value" id="latestVersion">Checking...</span></div>
-                <div class="version-row"><span class="version-label">Network ID:</span><span class="version-value" id="networkId">Loading...</span></div>
-                <div class="version-row"><span class="version-label">Environment:</span><span class="version-value" id="environmentInfo">Loading...</span></div>
-                <div class="version-status" id="versionStatus"><i class="fas fa-spinner fa-spin"></i> Checking...</div>
-            </div>
-            <div class="admin-actions">
-                <button class="admin-btn update" id="updateBtn" disabled><i class="fas fa-download"></i><span>Update</span></button>
-                <button class="admin-btn auth" id="reauthorizeBtn"><i class="fas fa-key"></i><span>Reauthorize</span></button>
-                <button class="admin-btn network" id="changeNetworkBtn"><i class="fas fa-network-wired"></i><span>Change Network ID</span></button>
-                <button class="admin-btn restart" id="restartBtn"><i class="fas fa-rotate-right"></i><span>Restart Service</span></button>
-                <button class="admin-btn reboot" id="rebootBtn"><i class="fas fa-power-off"></i><span>Reboot System</span></button>
-            </div>
-            <div id="actionMessage"></div>
-        </div>
-    </div>
-    
-    <div class="modal" id="deviceModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Connected Devices</h2>
-                <button class="close-btn" id="closeDeviceModal">&times;</button>
-            </div>
-            <div class="device-count" id="deviceCount">Loading...</div>
-            <table class="device-table">
-                <thead>
-                    <tr><th>Device</th><th>OS</th><th>Freq</th><th>IP</th><th>Manufacturer</th><th>Signal</th></tr>
-                </thead>
-                <tbody id="deviceTableBody">
-                    <tr><td colspan="6" style="text-align:center">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-    
-    <div class="modal" id="speedTestModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Speed Test</h2>
-                <button class="close-btn" id="closeSpeedTestModal">&times;</button>
-            </div>
-            <div class="speedtest-container" id="speedTestContainer">
-                <button class="header-btn" id="runSpeedTest" style="margin:20px auto"><i class="fas fa-play"></i><span>Run Test</span></button>
-            </div>
-        </div>
-    </div>
-    
-    <div class="modal" id="reauthorizeModal">
-        <div class="modal-content" style="max-width:500px">
-            <div class="modal-header">
-                <h2 class="modal-title">Reauthorize</h2>
-                <button class="close-btn" id="closeReauthorizeModal">&times;</button>
-            </div>
-            <div id="reauthStep1">
-                <div class="input-group">
-                    <label for="reauthEmail">Eero API Email:</label>
-                    <input type="email" id="reauthEmail" placeholder="email@example.com"/>
-                </div>
-                <button class="admin-btn auth" id="sendReauthCodeBtn" style="width:100%"><i class="fas fa-paper-plane"></i><span>Send Code</span></button>
-            </div>
-            <div id="reauthStep2" style="display:none">
-                <p style="text-align:center;margin-bottom:20px">✓ Code sent! Check your email.</p>
-                <div class="input-group">
-                    <label for="reauthCode">Verification Code:</label>
-                    <input type="text" id="reauthCode" placeholder="123456"/>
-                </div>
-                <button class="admin-btn auth" id="verifyReauthCodeBtn" style="width:100%"><i class="fas fa-check"></i><span>Verify</span></button>
-            </div>
-            <div id="reauthMessage"></div>
-        </div>
-    </div>
-    
-    <div class="modal" id="networkIdModal">
-        <div class="modal-content" style="max-width:500px">
-            <div class="modal-header">
-                <h2 class="modal-title">Change Network ID</h2>
-                <button class="close-btn" id="closeNetworkIdModal">&times;</button>
-            </div>
-            <div class="input-group">
-                <label for="newNetworkId">New Network ID:</label>
-                <input type="text" id="newNetworkId" placeholder="18073602"/>
-            </div>
-            <button class="admin-btn network" id="saveNetworkBtn" style="width:100%;margin-top:20px"><i class="fas fa-save"></i><span>Save & Restart</span></button>
-            <div id="networkMessage"></div>
-        </div>
-    </div>
-''')
-    
-    # Now write the JavaScript - I'll provide this in the next message due to length
-    html.write('''
     <script>
         let charts = {};
-        const cc = {primary:'#4da6ff',success:'#51cf66',warning:'#ffd43b',info:'#74c0fc',purple:'#b197fc',orange:'#ff922b'};
-        const opts = {responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#fff',font:{size:10}}}},scales:{y:{ticks:{color:'#fff',font:{size:9}},grid:{color:'rgba(255,255,255,0.1)'}},x:{ticks:{color:'#fff',font:{size:9}},grid:{color:'rgba(255,255,255,0.1)'}}}};
-        
         function initCharts() {
-            charts.users = new Chart(document.getElementById('usersChart').getContext('2d'), {
-                type: 'line',
-                data: {labels: [], datasets: [{label: 'Connected', data: [], borderColor: cc.primary, backgroundColor: 'rgba(77,166,255,0.1)', tension: 0.4, fill: true, borderWidth: 2}]},
-                options: opts
-            });
-            charts.deviceOS = new Chart(document.getElementById('deviceOSChart').getContext('2d'), {
-                type: 'doughnut',
-                data: {labels: ['iOS','Android','Windows','Other'], datasets: [{data: [0,0,0,0], backgroundColor: [cc.primary,cc.success,cc.info,cc.warning], borderWidth: 2, borderColor: '#001a33'}]},
-                options: {responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{color:'#fff',font:{size:10},padding:8}}}}
-            });
-            charts.frequency = new Chart(document.getElementById('frequencyChart').getContext('2d'), {
-                type: 'doughnut',
-                data: {labels: ['2.4 GHz','5 GHz','6 GHz'], datasets: [{data: [0,0,0], backgroundColor: [cc.orange,cc.primary,cc.purple], borderWidth: 2, borderColor: '#001a33'}]},
-                options: {responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom',labels:{color:'#fff',font:{size:10},padding:8}}}}
-            });
-            charts.signalStrength = new Chart(document.getElementById('signalStrengthChart').getContext('2d'), {
-                type: 'line',
-                data: {labels: [], datasets: [{label: 'Avg Signal', data: [], borderColor: cc.success, backgroundColor: 'rgba(81,207,102,0.1)', tension: 0.4, fill: true, borderWidth: 2}]},
-                options: opts
-            });
+            charts.users = new Chart(document.getElementById('usersChart').getContext('2d'), {type: 'line', data: {labels: [], datasets: [{label: 'Connected', data: [], borderColor: '#4da6ff', backgroundColor: 'rgba(77,166,255,0.1)', tension: 0.4, fill: true}]}});
+            charts.deviceOS = new Chart(document.getElementById('deviceOSChart').getContext('2d'), {type: 'doughnut', data: {labels: ['iOS','Android','Windows','Other'], datasets: [{data: [0,0,0,0], backgroundColor: ['#4da6ff','#51cf66','#74c0fc','#ffd43b']}]}});
+            charts.frequency = new Chart(document.getElementById('frequencyChart').getContext('2d'), {type: 'doughnut', data: {labels: ['2.4 GHz','5 GHz','6 GHz'], datasets: [{data: [0,0,0], backgroundColor: ['#ff922b','#4da6ff','#b197fc']}]}});
+            charts.signalStrength = new Chart(document.getElementById('signalStrengthChart').getContext('2d'), {type: 'line', data: {labels: [], datasets: [{label: 'Avg Signal', data: [], borderColor: '#51cf66', backgroundColor: 'rgba(81,207,102,0.1)', tension: 0.4, fill: true}]}});
         }
-        
         async function updateDashboard() {
             try {
                 const r = await fetch('/api/dashboard');
@@ -1166,155 +983,29 @@ if __name__ == '__main__':
                 charts.users.data.datasets[0].data = d.connected_users.map(e => e.count);
                 charts.users.update();
                 const os = d.device_os || {};
-                const tot = Object.values(os).reduce((a,b) => a+b, 0);
                 charts.deviceOS.data.datasets[0].data = [os.iOS||0, os.Android||0, os.Windows||0, os.Other||0];
                 charts.deviceOS.update();
-                document.getElementById('deviceOsSubtitle').textContent = `${tot} devices`;
+                document.getElementById('deviceOsSubtitle').textContent = `${Object.values(os).reduce((a,b) => a+b, 0)} devices`;
                 const fd = d.frequency_distribution || {};
-                const tf = (fd['2.4GHz']||0) + (fd['5GHz']||0) + (fd['6GHz']||0);
                 charts.frequency.data.datasets[0].data = [fd['2.4GHz']||0, fd['5GHz']||0, fd['6GHz']||0];
                 charts.frequency.update();
-                document.getElementById('frequencySubtitle').textContent = `${tf} devices`;
+                document.getElementById('frequencySubtitle').textContent = `${(fd['2.4GHz']||0) + (fd['5GHz']||0) + (fd['6GHz']||0)} devices`;
                 charts.signalStrength.data.labels = d.signal_strength_avg.map(e => new Date(e.timestamp).toLocaleTimeString());
                 charts.signalStrength.data.datasets[0].data = d.signal_strength_avg.map(e => e.avg_dbm);
                 charts.signalStrength.update();
                 document.getElementById('lastUpdate').textContent = `Updated: ${new Date(d.last_update).toLocaleTimeString()}`;
             } catch(e) { console.error(e); }
         }
-        
-        function getSigClass(s) {
-            if(s>=80) return 'signal-excellent';
-            if(s>=60) return 'signal-good';
-            if(s>=40) return 'signal-fair';
-            if(s>=20) return 'signal-poor';
-            return 'signal-weak';
-        }
-        
-        async function loadDevices() {
-            try {
-                const r = await fetch('/api/devices');
-                const d = await r.json();
-                document.getElementById('deviceCount').textContent = `Total: ${d.count} devices`;
-                const tb = document.getElementById('deviceTableBody');
-                if(d.devices.length === 0) {
-                    tb.innerHTML = '<tr><td colspan="6" style="text-align:center">No devices</td></tr>';
-                    return;
-                }
-                tb.innerHTML = d.devices.map(dev => `<tr><td><strong>${dev.name}</strong></td><td>${dev.device_os}</td><td>${dev.frequency}</td><td>${dev.ip}</td><td>${dev.manufacturer}</td><td><div style="display:flex;align-items:center;gap:10px"><div class="signal-bar"><div class="signal-fill ${getSigClass(dev.signal_avg)}" style="width:${dev.signal_avg}%"></div></div><small style="color:rgba(255,255,255,0.6)">${dev.signal_quality}</small></div></td></tr>`).join('');
-            } catch(e) { console.error(e); }
-        }
-        
-        async function runSpeedTest() {
-            const btn = document.getElementById('runSpeedTest');
-            const cont = document.getElementById('speedTestContainer');
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Running...</span>';
-            btn.disabled = true;
-            cont.innerHTML = '<div class="spinner"></div><p>Testing speed...</p>';
-            try {
-                await fetch('/api/speedtest/start', {method:'POST'});
-                const check = setInterval(async () => {
-                    const r = await fetch('/api/speedtest/status');
-                    const d = await r.json();
-                    if(!d.running && d.result) {
-                        clearInterval(check);
-                        if(d.result.error) {
-                            cont.innerHTML = `<p style="color:#ff6b6b">Error: ${d.result.error}</p>`;
-                        } else {
-                            cont.innerHTML = `<div class="speedtest-results"><div class="speedtest-metric"><div class="speedtest-metric-label">Download</div><div class="speedtest-metric-value">${d.result.download}</div><div class="speedtest-metric-unit">Mbps</div></div><div class="speedtest-metric"><div class="speedtest-metric-label">Upload</div><div class="speedtest-metric-value">${d.result.upload}</div><div class="speedtest-metric-unit">Mbps</div></div><div class="speedtest-metric"><div class="speedtest-metric-label">Ping</div><div class="speedtest-metric-value">${d.result.ping}</div><div class="speedtest-metric-unit">ms</div></div></div><button class="header-btn" onclick="runSpeedTest()" style="margin:20px auto"><i class="fas fa-redo"></i><span>Again</span></button>`;
-                        }
-                        btn.innerHTML = '<i class="fas fa-play"></i><span>Run Test</span>';
-                        btn.disabled = false;
-                    }
-                }, 2000);
-            } catch(e) {
-                cont.innerHTML = `<p style="color:#ff6b6b">Error</p>`;
-                btn.innerHTML = '<i class="fas fa-play"></i><span>Run Test</span>';
-                btn.disabled = false;
-            }
-        }
-        
-        async function checkVersion() {
-            try {
-                const r = await fetch('/api/version');
-                const d = await r.json();
-                document.getElementById('currentVersion').textContent = `v${d.version}`;
-                document.getElementById('networkId').textContent = d.network_id || 'N/A';
-                const envName = d.environment === 'production' ? 'Production' : 'Staging';
-                const envClass = d.environment === 'production' ? 'env-production' : 'env-staging';
-                document.getElementById('environmentInfo').innerHTML = `<span class="env-badge ${envClass}">${envName}</span> <small style="color:rgba(255,255,255,0.5)">${d.api_url||'N/A'}</small>`;
-                const lr = await fetch('/api/admin/check-update');
-                const ld = await lr.json();
-                document.getElementById('latestVersion').textContent = `v${ld.latest_version}`;
-                const st = document.getElementById('versionStatus');
-                const ub = document.getElementById('updateBtn');
-                if(ld.update_available) {
-                    st.className = 'version-status update-available';
-                    st.innerHTML = '<i class="fas fa-exclamation-circle"></i> Update Available!';
-                    ub.disabled = false;
-                } else {
-                    st.className = 'version-status up-to-date';
-                    st.innerHTML = '<i class="fas fa-check-circle"></i> Up to Date';
-                    ub.disabled = true;
-                }
-            } catch(e) { console.error(e); }
-        }
-        
-        // Event Listeners
-        document.getElementById('piIcon').addEventListener('click', () => {
-            document.getElementById('pixelateOverlay').classList.add('active');
-            setTimeout(() => {
-                document.getElementById('gibsonModal').classList.add('active');
-                checkVersion();
-            }, 300);
-        });
-        
-        document.getElementById('closeGibsonModal').addEventListener('click', () => {
-            document.getElementById('gibsonModal').classList.remove('active');
-            setTimeout(() => document.getElementById('pixelateOverlay').classList.remove('active'), 300);
-        });
-        
-        document.getElementById('deviceDetailsBtn').addEventListener('click', () => {
-            document.getElementById('deviceModal').classList.add('active');
-            loadDevices();
-        });
-        
-        document.getElementById('closeDeviceModal').addEventListener('click', () => {
-            document.getElementById('deviceModal').classList.remove('active');
-        });
-        
-        document.getElementById('speedTestBtn').addEventListener('click', () => {
-            document.getElementById('speedTestModal').classList.add('active');
-        });
-        
-        document.getElementById('closeSpeedTestModal').addEventListener('click', () => {
-            document.getElementById('speedTestModal').classList.remove('active');
-        });
-        
-        document.getElementById('runSpeedTest').addEventListener('click', runSpeedTest);
-        
-        document.querySelectorAll('.modal').forEach(m => {
-            m.addEventListener('click', e => {
-                if(e.target === m) {
-                    m.classList.remove('active');
-                    document.getElementById('pixelateOverlay').classList.remove('active');
-                }
-            });
-        });
-        
-        window.addEventListener('load', () => {
-            initCharts();
-            updateDashboard();
-            setInterval(updateDashboard, 60000);
-        });
+        window.addEventListener('load', () => { initCharts(); updateDashboard(); setInterval(updateDashboard, 60000); });
     </script>
 </body>
 </html>
-''')
-    html.close()
+"""
     
-    shutil.copy('/tmp/frontend.html', f"{INSTALL_DIR}/frontend/index.html")
+    with open(f"{INSTALL_DIR}/frontend/index.html", 'w') as f:
+        f.write(frontend_html)
+    
     run_command(f'chown {USER}:{USER} {INSTALL_DIR}/frontend/index.html')
-    os.remove('/tmp/frontend.html')
     print_success("Frontend created")
 
 def create_service():
@@ -1344,61 +1035,38 @@ WantedBy=multi-user.target
     run_command('systemctl start eero-dashboard.service')
     time.sleep(3)
     
-    # Check if service started successfully
     result = subprocess.run(['systemctl', 'is-active', 'eero-dashboard'], capture_output=True, text=True)
     if result.stdout.strip() == 'active':
         print_success("Service started successfully")
     else:
         print_warning("Service may have issues - checking logs...")
-        subprocess.run(['journalctl', '-u', 'eero-dashboard', '-n', '20', '--no-pager'])
+        subprocess.run(['journalctl', '-u', 'eero-dashboard', '-n', '30', '--no-pager'])
 
 def create_kiosk():
     print_info("Setting up kiosk mode...")
-    kiosk = """#!/bin/bash
-# Wait for X server
+    kiosk = f"""#!/bin/bash
 sleep 5
-
-# Disable screen blanking
 xset s off 2>/dev/null
 xset -dpms 2>/dev/null
 xset s noblank 2>/dev/null
-
-# Hide cursor after 0.1 seconds
 unclutter -idle 0.1 -root &
-
-# Determine which browser is available
 BROWSER=""
 if command -v chromium-browser &>/dev/null; then
     BROWSER="chromium-browser"
 elif command -v chromium &>/dev/null; then
     BROWSER="chromium"
 fi
-
-# Launch browser in kiosk mode
 if [ -n "$BROWSER" ]; then
-    $BROWSER \\
-        --kiosk \\
-        --noerrdialogs \\
-        --disable-infobars \\
-        --no-first-run \\
-        --disable-session-crashed-bubble \\
-        --disable-crash-reporter \\
-        --check-for-update-interval=31536000 \\
-        --disable-component-update \\
-        http://localhost
-else
-    echo "No browser found!" > /tmp/kiosk_error.log
+    $BROWSER --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble --disable-crash-reporter http://localhost
 fi
 """
     with open(f"{INSTALL_DIR}/start_kiosk.sh", 'w') as f:
         f.write(kiosk)
     os.chmod(f"{INSTALL_DIR}/start_kiosk.sh", 0o755)
     
-    # Create autostart directory
     autostart_dir = f'/home/{USER}/.config/autostart'
     Path(autostart_dir).mkdir(parents=True, exist_ok=True)
     
-    # Create desktop entry for autostart
     desktop = f"""[Desktop Entry]
 Type=Application
 Name=Eero Dashboard Kiosk
@@ -1409,11 +1077,10 @@ X-GNOME-Autostart-enabled=true
         f.write(desktop)
     
     run_command(f'chown -R {USER}:{USER} /home/{USER}/.config')
-    print_success("Kiosk mode configured - will start on boot")
+    print_success("Kiosk mode configured")
 
 def setup_logs():
-    for l in [f"{INSTALL_DIR}/logs/backend.log"]:
-        Path(l).touch()
+    Path(f"{INSTALL_DIR}/logs/backend.log").touch()
     run_command(f'chown -R {USER}:{USER} {INSTALL_DIR}/logs')
 
 def main():
@@ -1423,7 +1090,6 @@ def main():
         check_for_updates()
     check_root()
     
-    # Check port 80 availability
     if not check_port_80():
         print_error("Cannot proceed without port 80 available")
         sys.exit(1)
@@ -1435,7 +1101,6 @@ def main():
         install_dependencies()
         create_directories()
         
-        # Get environment and API URL
         environment = prompt_environment()
         config = load_config()
         api_url = config.get('api_url', 'api-user.stage.e2ro.com')
@@ -1450,18 +1115,15 @@ def main():
         create_service()
         create_kiosk()
         setup_logs()
+        
         print_header("Complete!")
         print_success(f"Dashboard v{SCRIPT_VERSION} installed!")
         env_name = "Production" if environment == "production" else "Staging"
         print_info(f"Environment: {env_name} ({api_url})")
-        print_info("Access dashboard at: http://localhost")
-        print_info("Or from network: http://<your-ip>")
-        print_info("Click π icon (bottom-right) for admin panel")
-        print_info("")
-        print_warning("Kiosk mode will start on next boot")
-        print_info("To check status: systemctl status eero-dashboard")
-        print_info("To view logs: journalctl -u eero-dashboard -f")
-        print_info("To start kiosk now: DISPLAY=:0 " + f"{INSTALL_DIR}/start_kiosk.sh &")
+        print_info("Access: http://localhost or http://<your-ip>")
+        print_info("Status: systemctl status eero-dashboard")
+        print_info("Logs: journalctl -u eero-dashboard -f")
+        
     except KeyboardInterrupt:
         print_error("\nCancelled")
         sys.exit(1)
