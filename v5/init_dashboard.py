@@ -11,7 +11,7 @@ import json
 import requests
 from pathlib import Path
 
-SCRIPT_VERSION = "5.2.1"
+SCRIPT_VERSION = "5.2.2"
 GITHUB_REPO = "eero-drew/minirackdash"
 GITHUB_RAW = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 SCRIPT_URL_V5 = f"{GITHUB_RAW}/v5/init_dashboard.py"
@@ -88,6 +88,89 @@ def save_config(config):
     except Exception as e:
         print_error(f"Could not save config: {e}")
         return False
+
+def cleanup_installation():
+    """Remove all installed files and services"""
+    print_header("Cleaning Up Previous Installation")
+    
+    # Backup config and token
+    backup_dir = "/tmp/eero_dashboard_backup"
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    print_info("Backing up configuration and token...")
+    if os.path.exists(CONFIG_FILE):
+        shutil.copy2(CONFIG_FILE, f"{backup_dir}/.config.json")
+        print_success("Config backed up")
+    if os.path.exists(TOKEN_FILE):
+        shutil.copy2(TOKEN_FILE, f"{backup_dir}/.eero_token")
+        print_success("Token backed up")
+    
+    # Stop and disable service
+    print_info("Stopping service...")
+    subprocess.run(['systemctl', 'stop', 'eero-dashboard'], capture_output=True)
+    subprocess.run(['systemctl', 'disable', 'eero-dashboard'], capture_output=True)
+    print_success("Service stopped")
+    
+    # Remove service file
+    print_info("Removing service file...")
+    if os.path.exists('/etc/systemd/system/eero-dashboard.service'):
+        os.remove('/etc/systemd/system/eero-dashboard.service')
+        subprocess.run(['systemctl', 'daemon-reload'], capture_output=True)
+        print_success("Service file removed")
+    
+    # Remove installation directory (except config and token)
+    print_info("Removing installation files...")
+    if os.path.exists(INSTALL_DIR):
+        # Remove subdirectories
+        for subdir in ['backend', 'frontend', 'logs', 'venv']:
+            subdir_path = os.path.join(INSTALL_DIR, subdir)
+            if os.path.exists(subdir_path):
+                shutil.rmtree(subdir_path)
+                print_info(f"  Removed {subdir}/")
+        
+        # Remove scripts
+        for script in ['start_kiosk.sh']:
+            script_path = os.path.join(INSTALL_DIR, script)
+            if os.path.exists(script_path):
+                os.remove(script_path)
+        
+        print_success("Installation files removed")
+    
+    # Remove autostart
+    print_info("Removing kiosk autostart...")
+    autostart_file = f'/home/{USER}/.config/autostart/dashboard.desktop'
+    if os.path.exists(autostart_file):
+        os.remove(autostart_file)
+        print_success("Autostart removed")
+    
+    print_success("Cleanup complete!")
+    print_info(f"Config and token backed up to: {backup_dir}")
+    
+    return backup_dir
+
+def restore_backup(backup_dir):
+    """Restore config and token from backup"""
+    print_info("Restoring configuration and token...")
+    
+    if os.path.exists(f"{backup_dir}/.config.json"):
+        shutil.copy2(f"{backup_dir}/.config.json", CONFIG_FILE)
+        os.chmod(CONFIG_FILE, 0o600)
+        if os.geteuid() == 0:
+            import pwd
+            uid = pwd.getpwnam(USER).pw_uid
+            gid = pwd.getpwnam(USER).pw_gid
+            os.chown(CONFIG_FILE, uid, gid)
+        print_success("Config restored")
+    
+    if os.path.exists(f"{backup_dir}/.eero_token"):
+        shutil.copy2(f"{backup_dir}/.eero_token", TOKEN_FILE)
+        os.chmod(TOKEN_FILE, 0o600)
+        if os.geteuid() == 0:
+            import pwd
+            uid = pwd.getpwnam(USER).pw_uid
+            gid = pwd.getpwnam(USER).pw_gid
+            os.chown(TOKEN_FILE, uid, gid)
+        print_success("Token restored")
 
 def input_with_timeout(prompt, timeout, default=None):
     result = [None]
@@ -280,10 +363,13 @@ def force_update_from_cloud():
         if latest_version:
             print_info(f"Downloaded version: v{latest_version}")
         
+        # Clean up existing installation
+        backup_dir = cleanup_installation()
+        
         current_script = os.path.abspath(__file__)
         backup_path = f"{current_script}.backup"
         shutil.copy2(current_script, backup_path)
-        print_info(f"Backup created: {backup_path}")
+        print_info(f"Script backup created: {backup_path}")
         
         with open(current_script, 'w') as f:
             f.write(latest_script)
@@ -291,7 +377,7 @@ def force_update_from_cloud():
         
         print_success(f"Script updated to v{latest_version}!")
         print_info("Restarting with new version...")
-        time.sleep(1)
+        time.sleep(2)
         os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
         
     except Exception as e:
@@ -311,13 +397,18 @@ def check_for_updates():
         
         if latest_version and compare_versions(latest_version, SCRIPT_VERSION) > 0:
             print_warning(f"New version available: v{latest_version}")
+            print_info("Performing clean installation with new version...")
+            
+            # Clean up and update
+            backup_dir = cleanup_installation()
+            
             current_script = os.path.abspath(__file__)
             shutil.copy2(current_script, f"{current_script}.backup")
             with open(current_script, 'w') as f:
                 f.write(latest_script)
             os.chmod(current_script, 0o755)
             print_success(f"Updated to v{latest_version}!")
-            time.sleep(1)
+            time.sleep(2)
             os.execv(sys.executable, [sys.executable, current_script] + sys.argv[1:])
         else:
             print_success("Running latest version")
@@ -381,30 +472,14 @@ def setup_python():
 def create_backend_api(network_id, api_url):
     print_info("Creating backend...")
     
-    # Write backend code to file
     backend_code = """#!/usr/bin/env python3
-import os
-import sys
-import json
-import requests
-import speedtest
-import threading
-import subprocess
-import urllib.request
-import re
-import time
-import socket
+import os, sys, json, requests, speedtest, threading, subprocess, urllib.request, re, time, socket
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import logging
 
-logging.basicConfig(
-    filename='/home/eero/dashboard/logs/backend.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-
+logging.basicConfig(filename='/home/eero/dashboard/logs/backend.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 console = logging.StreamHandler()
 console.setLevel(logging.INFO)
 logging.getLogger('').addHandler(console)
@@ -417,7 +492,7 @@ API_TOKEN_FILE = "/home/eero/dashboard/.eero_token"
 CONFIG_FILE = "/home/eero/dashboard/.config.json"
 GITHUB_RAW = "https://raw.githubusercontent.com/REPLACE_REPO/main"
 SCRIPT_URL_V5 = f"{GITHUB_RAW}/v5/init_dashboard.py"
-CURRENT_VERSION = "5.2.1"
+CURRENT_VERSION = "5.2.2"
 
 def check_port_available(port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -458,13 +533,15 @@ class EeroAPI:
         self.network_id = self.load_network_id()
         self.api_url = get_api_url()
         self.api_base = f"https://{self.api_url}/2.2"
-        logging.info(f"EeroAPI initialized with {self.api_url}")
+        logging.info(f"EeroAPI initialized - API: {self.api_url}, Network: {self.network_id}")
     
     def load_token(self):
         try:
             if os.path.exists(API_TOKEN_FILE):
                 with open(API_TOKEN_FILE, 'r') as f:
-                    return f.read().strip()
+                    token = f.read().strip()
+                    logging.info("Token loaded successfully")
+                    return token
         except Exception as e:
             logging.error(f"Token load error: {e}")
         return None
@@ -484,7 +561,7 @@ class EeroAPI:
         self.api_base = f"https://{self.api_url}/2.2"
     
     def get_headers(self):
-        headers = {'Content-Type': 'application/json', 'User-Agent': 'Eero-Dashboard/5.2.1'}
+        headers = {'Content-Type': 'application/json', 'User-Agent': 'Eero-Dashboard/5.2.2'}
         if self.api_token:
             headers['X-User-Token'] = self.api_token
         return headers
@@ -492,14 +569,18 @@ class EeroAPI:
     def get_all_devices(self):
         try:
             url = f"{self.api_base}/networks/{self.network_id}/devices"
+            logging.info(f"Fetching devices from: {url}")
             response = self.session.get(url, headers=self.get_headers(), timeout=10)
             response.raise_for_status()
             devices_data = response.json()
             if 'data' in devices_data:
                 if isinstance(devices_data['data'], list):
+                    logging.info(f"Retrieved {len(devices_data['data'])} devices")
                     return devices_data['data']
                 elif isinstance(devices_data['data'], dict) and 'devices' in devices_data['data']:
+                    logging.info(f"Retrieved {len(devices_data['data']['devices'])} devices")
                     return devices_data['data']['devices']
+            logging.warning("No device data in response")
             return []
         except Exception as e:
             logging.error(f"Device fetch error: {e}")
@@ -862,9 +943,10 @@ def reauthorize():
 
 if __name__ == '__main__':
     logging.info("=" * 60)
-    logging.info("Starting Eero Dashboard Backend v5.2.1")
+    logging.info("Starting Eero Dashboard Backend v5.2.2")
     logging.info(f"API URL: {eero_api.api_url}")
     logging.info(f"Network ID: {eero_api.network_id}")
+    logging.info("=" * 60)
     
     if not check_port_available(80):
         logging.error("Port 80 is not available!")
@@ -890,7 +972,6 @@ if __name__ == '__main__':
         sys.exit(1)
 """
     
-    # Replace placeholders
     backend_code = backend_code.replace("REPLACE_NETWORK_ID", network_id)
     backend_code = backend_code.replace("REPLACE_REPO", GITHUB_REPO)
     
@@ -908,7 +989,7 @@ def create_frontend():
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Eero v5.2.1</title>
+    <title>Eero v5.2.2</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -934,7 +1015,7 @@ def create_frontend():
 </head>
 <body>
     <div class="header">
-        <div class="header-title">Network Dashboard v5.2.1</div>
+        <div class="header-title">Network Dashboard v5.2.2</div>
         <div class="header-actions">
             <div class="status-indicator">
                 <div class="status-dot"></div>
@@ -1011,7 +1092,7 @@ def create_frontend():
 def create_service():
     print_info("Creating service...")
     svc = f"""[Unit]
-Description=Eero Dashboard v5.2.1
+Description=Eero Dashboard v5.2.2
 After=network.target
 
 [Service]
@@ -1085,9 +1166,16 @@ def setup_logs():
 
 def main():
     os.system('clear')
-    print_header(f"Eero Dashboard v5.2.1 Installer - v{SCRIPT_VERSION}")
+    print_header(f"Eero Dashboard v5.2.2 Installer - v{SCRIPT_VERSION}")
+    
+    # Check if this is an existing installation
+    if os.path.exists(f"{INSTALL_DIR}/backend/eero_api.py"):
+        print_warning("Existing installation detected")
+        print_info("This will perform a clean reinstall")
+    
     if '--no-update' not in sys.argv:
         check_for_updates()
+    
     check_root()
     
     if not check_port_80():
@@ -1095,11 +1183,21 @@ def main():
         sys.exit(1)
     
     print_header("Starting Installation")
+    
+    # Check for backup
+    backup_dir = "/tmp/eero_dashboard_backup"
+    has_backup = os.path.exists(f"{backup_dir}/.config.json")
+    
     try:
         create_user()
         update_system()
         install_dependencies()
         create_directories()
+        
+        # Restore or prompt for new config
+        if has_backup:
+            print_info("Restoring previous configuration...")
+            restore_backup(backup_dir)
         
         environment = prompt_environment()
         config = load_config()
@@ -1107,9 +1205,14 @@ def main():
         
         network_id = prompt_network_id()
         setup_python()
-        if not authenticate_eero(network_id, api_url):
-            print_error("Auth failed")
-            sys.exit(1)
+        
+        if not has_backup or not os.path.exists(TOKEN_FILE):
+            if not authenticate_eero(network_id, api_url):
+                print_error("Auth failed")
+                sys.exit(1)
+        else:
+            print_success("Using existing authentication token")
+        
         create_backend_api(network_id, api_url)
         create_frontend()
         create_service()
@@ -1123,6 +1226,7 @@ def main():
         print_info("Access: http://localhost or http://<your-ip>")
         print_info("Status: systemctl status eero-dashboard")
         print_info("Logs: journalctl -u eero-dashboard -f")
+        print_info("Backend log: tail -f /home/eero/dashboard/logs/backend.log")
         
     except KeyboardInterrupt:
         print_error("\nCancelled")
