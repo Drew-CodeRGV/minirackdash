@@ -1,6 +1,6 @@
-# Eero Network Dashboard v5.2.4
+# The Minirack eero Network Dashboard v5.2.4
 
-A comprehensive, real-time network monitoring dashboard for Eero networks with a beautiful web interface and powerful admin features. Built specifically for Raspberry Pi with kiosk mode support.
+A comprehensive, real-time network monitoring dashboard for eero networks with a beautiful web interface and powerful admin features. Built specifically for a fresh install of a Raspberry Pi with Chromium and kiosk mode support.
 
 ![Version](https://img.shields.io/badge/version-5.2.4-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.7+-green.svg)
@@ -51,7 +51,7 @@ A comprehensive, real-time network monitoring dashboard for Eero networks with a
 
 ### Environment Support
 - **Production Environment** - Connect to `api-user.e2ro.com`
-- **Staging Environment** - Connect to `api-user.stage.e2ro.com`
+- **Staging Environment** - Connect to sandbox environment
 - **Easy Switching** - Change environments through configuration
 
 ### Raspberry Pi Optimized
@@ -94,7 +94,7 @@ A comprehensive, real-time network monitoring dashboard for Eero networks with a
 - Root/sudo access
 
 ### Network
-- Active Eero network
+- Active eero network
 - Eero API access credentials
 - Port 80 available (no other web servers running)
 
@@ -126,9 +126,9 @@ sudo python3 init_dashboard.py
    ```
 
 4. **Follow the prompts:**
-   - Select environment (Production or Staging)
-   - Enter your Eero Network ID
-   - Provide email for API authentication
+   - Select environment (Production or Sandbox)
+   - Enter your eero Network ID
+   - Provide email for API authentication - Must be a registered API user!
    - Enter verification code from email
 
 5. **Access the dashboard:**
@@ -140,7 +140,7 @@ sudo python3 init_dashboard.py
 
 ### Environment Selection
 - **Production**: Uses `api-user.e2ro.com`
-- **Staging**: Uses `api-user.stage.e2ro.com`
+- **Sandbox**: Uses sandbox environment
 
 Configuration is saved to `/home/eero/dashboard/.config.json`
 
@@ -364,7 +364,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 🙏 Acknowledgments
 
-- Eero for providing network hardware and API access
+- eero for providing network hardware and API access
 - Chart.js for beautiful data visualizations
 - Font Awesome for icon library
 - Flask and Python communities
@@ -389,7 +389,7 @@ For issues, questions, or suggestions:
 
 ---
 
-**Made with ❤️ for Eero Networks**
+**Made with ❤️ for eero Networks by Drew Lentz - drlentz@eero.com or drew@drewlentz.com**
 
 ---
 
