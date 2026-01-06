@@ -16,10 +16,11 @@ from flask_cors import CORS
 import logging
 
 # Configuration
-VERSION = "6.1.0-production"
+VERSION = "6.1.1-production"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
+HISTORY_FILE = "/opt/eero/app/device_history.json"
 
 # Setup logging
 logging.basicConfig(
@@ -50,7 +51,39 @@ def load_config():
         "api_url": "api-user.e2ro.com"
     }
 
-def save_config(config):
+def load_history():
+    """Load historical data from persistent storage"""
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, 'r') as f:
+                history = json.load(f)
+                logging.info(f"Loaded history: {len(history.get('connected_users', []))} user entries, {len(history.get('signal_strength_avg', []))} signal entries")
+                return history
+    except Exception as e:
+        logging.error(f"History load error: {e}")
+    
+    return {
+        'connected_users': [],
+        'signal_strength_avg': []
+    }
+
+def save_history(history_data):
+    """Save historical data to persistent storage"""
+    try:
+        # Only save the time-series data, not current device states
+        to_save = {
+            'connected_users': history_data.get('connected_users', []),
+            'signal_strength_avg': history_data.get('signal_strength_avg', [])
+        }
+        
+        with open(HISTORY_FILE, 'w') as f:
+            json.dump(to_save, f, indent=2)
+        os.chmod(HISTORY_FILE, 0o600)
+        logging.info(f"Saved history: {len(to_save['connected_users'])} user entries, {len(to_save['signal_strength_avg'])} signal entries")
+        return True
+    except Exception as e:
+        logging.error(f"History save error: {e}")
+        return False
     """Save configuration"""
     try:
         with open(CONFIG_FILE, 'w') as f:
@@ -147,12 +180,15 @@ class EeroAPI:
 # Initialize API
 eero_api = EeroAPI()
 
-# Data cache - matches macOS version structure
+# Load historical data on startup
+historical_data = load_history()
+
+# Data cache - initialize with loaded history
 data_cache = {
-    'connected_users': [],
+    'connected_users': historical_data.get('connected_users', []),
     'device_os': {},
     'frequency_distribution': {},
-    'signal_strength_avg': [],
+    'signal_strength_avg': historical_data.get('signal_strength_avg', []),
     'devices': [],
     'last_update': None
 }
@@ -270,6 +306,9 @@ def update_cache():
         # Validate we got actual device data
         if not all_devices:
             logging.warning("No devices returned from API - keeping previous cache")
+            # Still update the timestamp so we know we tried
+            if 'last_update' in data_cache:
+                data_cache['last_update'] = datetime.now().isoformat()
             return
         
         # Include both wired and wireless connected devices
@@ -374,6 +413,9 @@ def update_cache():
             'last_update': current_time.isoformat(),
             'last_successful_update': current_time.isoformat()
         })
+        
+        # Save historical data to persistent storage
+        save_history(data_cache)
         
         logging.info(f"Cache updated successfully: {len(connected_devices)} total devices ({len(wireless_devices)} wireless, {len(connected_devices) - len(wireless_devices)} wired)")
         
@@ -711,7 +753,19 @@ def reauthorize():
         logging.error(f"Reauthorization error: {str(e)}")
         return jsonify({'success': False, 'message': f'Authentication error: {str(e)}'}), 500
 
-if __name__ == '__main__':
+def periodic_save():
+    """Periodically save historical data"""
+    while True:
+        try:
+            time.sleep(300)  # Save every 5 minutes
+            if data_cache.get('connected_users'):
+                save_history(data_cache)
+        except Exception as e:
+            logging.error(f"Periodic save error: {e}")
+
+# Start periodic save thread
+save_thread = threading.Thread(target=periodic_save, daemon=True)
+save_thread.start()
     logging.info(f"Starting MiniRack Dashboard {VERSION}")
     
     # Initial cache update
