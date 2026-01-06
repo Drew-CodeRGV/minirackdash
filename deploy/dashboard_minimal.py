@@ -16,7 +16,7 @@ from flask_cors import CORS
 import logging
 
 # Configuration
-VERSION = "6.1.1-production"
+VERSION = "6.1.2-production"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
@@ -78,6 +78,23 @@ def save_history(history_data):
         
         with open(HISTORY_FILE, 'w') as f:
             json.dump(to_save, f, indent=2)
+        os.chmod(HISTORY_FILE, 0o600)
+        logging.info(f"Saved history: {len(to_save['connected_users'])} user entries, {len(to_save['signal_strength_avg'])} signal entries")
+        return True
+    except Exception as e:
+        logging.error(f"History save error: {e}")
+        return False
+
+def save_config(config):
+    """Save configuration"""
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+        os.chmod(CONFIG_FILE, 0o600)
+        return True
+    except Exception as e:
+        logging.error(f"Config save error: {e}")
+        return False
         os.chmod(HISTORY_FILE, 0o600)
         logging.info(f"Saved history: {len(to_save['connected_users'])} user entries, {len(to_save['signal_strength_avg'])} signal entries")
         return True
@@ -760,12 +777,7 @@ def periodic_save():
             time.sleep(300)  # Save every 5 minutes
             if data_cache.get('connected_users'):
                 save_history(data_cache)
-        except Exception as e:
-            logging.error(f"Periodic save error: {e}")
-
-# Start periodic save thread
-save_thread = threading.Thread(target=periodic_save, daemon=True)
-save_thread.start()
+if __name__ == '__main__':
     logging.info(f"Starting MiniRack Dashboard {VERSION}")
     
     # Initial cache update
