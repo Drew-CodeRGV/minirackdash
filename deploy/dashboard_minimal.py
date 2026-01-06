@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
-"""
-MiniRack Dashboard - Simple Working Version
-"""
 import os
 import json
 import requests
-import time
-from datetime import datetime, timedelta
-from flask import Flask, jsonify, request
+from datetime import datetime
+from flask import Flask, jsonify
 from flask_cors import CORS
 import logging
 
-# Configuration
-VERSION = "6.2.0-simple"
+VERSION = "6.2.1-fixed"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -27,35 +21,22 @@ logging.basicConfig(
     ]
 )
 
-# Flask app
 app = Flask(__name__)
 CORS(app)
 
 def load_config():
-    """Load configuration"""
     try:
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'r') as f:
                 return json.load(f)
     except Exception as e:
-        logging.error(f"Config load error: {e}")
+        logging.error("Config load error: " + str(e))
     
     return {
         "network_id": "20478317",
         "environment": "production",
         "api_url": "api-user.e2ro.com"
     }
-
-def save_config(config):
-    """Save configuration"""
-    try:
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(config, f, indent=2)
-        os.chmod(CONFIG_FILE, 0o600)
-        return True
-    except Exception as e:
-        logging.error(f"Config save error: {e}")
-        return False
 
 class EeroAPI:
     def __init__(self):
@@ -64,32 +45,29 @@ class EeroAPI:
         self.api_token = self.load_token()
         self.network_id = self.config.get('network_id', '20478317')
         self.api_url = self.config.get('api_url', 'api-user.e2ro.com')
-        self.api_base = f"https://{self.api_url}/2.2"
+        self.api_base = "https://" + self.api_url + "/2.2"
     
     def load_token(self):
-        """Load API token"""
         try:
             if os.path.exists(TOKEN_FILE):
                 with open(TOKEN_FILE, 'r') as f:
                     return f.read().strip()
         except Exception as e:
-            logging.error(f"Token load error: {e}")
+            logging.error("Token load error: " + str(e))
         return None
     
     def get_headers(self):
-        """Get request headers"""
         headers = {
             'Content-Type': 'application/json',
-            'User-Agent': f'MiniRack-Dashboard/{VERSION}'
+            'User-Agent': 'MiniRack-Dashboard/' + VERSION
         }
         if self.api_token:
             headers['X-User-Token'] = self.api_token
         return headers
     
     def get_network_info(self):
-        """Get network information"""
         try:
-            url = f"{self.api_base}/networks/{self.network_id}"
+            url = self.api_base + "/networks/" + self.network_id
             response = self.session.get(url, headers=self.get_headers(), timeout=10)
             response.raise_for_status()
             data = response.json()
@@ -98,30 +76,27 @@ class EeroAPI:
                 return data['data']
             return {}
         except Exception as e:
-            logging.error(f"Network info fetch error: {e}")
+            logging.error("Network info fetch error: " + str(e))
             return {}
     
     def get_all_devices(self):
-        """Get all devices"""
         try:
-            url = f"{self.api_base}/networks/{self.network_id}/devices"
+            url = self.api_base + "/networks/" + self.network_id + "/devices"
             response = self.session.get(url, headers=self.get_headers(), timeout=15)
             response.raise_for_status()
             data = response.json()
             
             if 'data' in data:
                 devices = data['data'] if isinstance(data['data'], list) else data['data'].get('devices', [])
-                logging.info(f"Retrieved {len(devices)} devices")
+                logging.info("Retrieved " + str(len(devices)) + " devices")
                 return devices
             return []
         except Exception as e:
-            logging.error(f"Device fetch error: {e}")
+            logging.error("Device fetch error: " + str(e))
             return []
 
-# Initialize API
 eero_api = EeroAPI()
 
-# Simple data cache
 data_cache = {
     'connected_users': [],
     'device_os': {},
@@ -132,30 +107,27 @@ data_cache = {
 }
 
 def detect_device_os(device):
-    """Simple device OS detection"""
     manufacturer = str(device.get('manufacturer', '')).lower()
     hostname = str(device.get('hostname', '')).lower()
-    text = f"{manufacturer} {hostname}"
+    text = manufacturer + " " + hostname
     
-    if 'amazon' in text or 'echo' in text or 'alexa' in text:
+    if 'amazon' in text or 'echo' in text:
         return 'Amazon'
-    elif 'apple' in text or 'iphone' in text or 'ipad' in text or 'mac' in text:
+    elif 'apple' in text or 'iphone' in text or 'ipad' in text:
         return 'iOS'
     elif 'android' in text or 'samsung' in text or 'google' in text:
         return 'Android'
-    elif 'windows' in text or 'microsoft' in text or 'dell' in text or 'hp' in text:
+    elif 'windows' in text or 'microsoft' in text or 'dell' in text:
         return 'Windows'
     else:
         return 'Other'
 
 def update_cache():
-    """Update data cache"""
     global data_cache
     try:
         all_devices = eero_api.get_all_devices()
         connected_devices = [d for d in all_devices if d.get('connected')]
         
-        # Simple device processing
         device_list = []
         os_counts = {'iOS': 0, 'Android': 0, 'Windows': 0, 'Amazon': 0, 'Other': 0}
         
@@ -172,7 +144,6 @@ def update_cache():
                 'connection_type': 'Wireless' if device.get('wireless') else 'Wired'
             })
         
-        # Update cache
         current_time = datetime.now()
         data_cache.update({
             'connected_users': [{'timestamp': current_time.isoformat(), 'count': len(connected_devices)}],
@@ -186,21 +157,19 @@ def update_cache():
             'last_update': current_time.isoformat()
         })
         
-        logging.info(f"Cache updated: {len(connected_devices)} devices")
+        logging.info("Cache updated: " + str(len(connected_devices)) + " devices")
         
     except Exception as e:
-        logging.error(f"Cache update error: {e}")
+        logging.error("Cache update error: " + str(e))
 
-# Routes
 @app.route('/')
 def index():
-    """Serve main dashboard page"""
     try:
         if os.path.exists(TEMPLATE_FILE):
             with open(TEMPLATE_FILE, 'r') as f:
                 return f.read()
     except Exception as e:
-        logging.error(f"Template load error: {e}")
+        logging.error("Template load error: " + str(e))
     
     return '''<!DOCTYPE html>
 <html><head><title>MiniRack Dashboard</title></head>
@@ -216,7 +185,6 @@ def get_dashboard_data():
 
 @app.route('/api/network')
 def get_network_info():
-    """Get network information"""
     try:
         network_info = eero_api.get_network_info()
         return jsonify({
@@ -256,13 +224,12 @@ def health():
     return jsonify({'status': 'healthy', 'version': VERSION})
 
 if __name__ == '__main__':
-    logging.info(f"Starting MiniRack Dashboard {VERSION}")
+    logging.info("Starting MiniRack Dashboard " + VERSION)
     
-    # Initial cache update
     try:
         update_cache()
         logging.info("Initial cache update complete")
     except Exception as e:
-        logging.warning(f"Initial cache update failed: {e}")
+        logging.warning("Initial cache update failed: " + str(e))
     
     app.run(host='0.0.0.0', port=5000, debug=False)
