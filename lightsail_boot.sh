@@ -18,7 +18,7 @@ pip3 install --break-system-packages flask-cors speedtest-cli gunicorn
 
 # Clone repository
 cd /tmp
-git clone https://github.com/Drew-CodeRGV/minirackdash.git
+git clone -b eeroNetworkDash https://github.com/Drew-CodeRGV/minirackdash.git
 cd minirackdash
 
 # Run the full installer from GitHub

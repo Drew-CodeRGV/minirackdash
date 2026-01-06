@@ -27,7 +27,7 @@ git clone https://github.com/Drew-CodeRGV/minirackdash.git
 cd minirackdash
 
 echo "📋 Copying application files..."
-cp deploy/dashboard.py /opt/eero/app/
+cp deploy/dashboard_full.py /opt/eero/app/dashboard.py
 cp deploy/config.json /opt/eero/app/
 cp deploy/requirements.txt /opt/eero/app/
 
@@ -96,9 +96,9 @@ cat > /opt/eero/update.sh << 'EOF'
 echo "🔄 Updating MiniRack Dashboard from GitHub..."
 cd /tmp
 rm -rf minirackdash
-git clone https://github.com/Drew-CodeRGV/minirackdash.git
+git clone -b eeroNetworkDash https://github.com/Drew-CodeRGV/minirackdash.git
 cd minirackdash
-cp deploy/dashboard.py /opt/eero/app/
+cp deploy/dashboard_full.py /opt/eero/app/dashboard.py
 cp deploy/config.json /opt/eero/app/
 chown -R www-data:www-data /opt/eero
 systemctl restart eero-dashboard

@@ -10,7 +10,7 @@ echo "📦 Setting up MiniRack Dashboard from GitHub..."
 mkdir -p /opt/eero/{app,logs,backups}
 
 # Copy application files from repository
-cp deploy/dashboard.py /opt/eero/app/
+cp deploy/dashboard_full.py /opt/eero/app/dashboard.py
 cp deploy/config.json /opt/eero/app/
 cp deploy/requirements.txt /opt/eero/app/
 
@@ -68,12 +68,12 @@ nginx -t
 # Create update script
 cat > /opt/eero/update.sh << 'EOF'
 #!/bin/bash
-echo "🔄 Updating from GitHub..."
+echo "🔄 Updating MiniRack Dashboard from GitHub..."
 cd /tmp
 rm -rf minirackdash
-git clone https://github.com/Drew-CodeRGV/minirackdash.git
+git clone -b eeroNetworkDash https://github.com/Drew-CodeRGV/minirackdash.git
 cd minirackdash
-cp deploy/dashboard.py /opt/eero/app/
+cp deploy/dashboard_full.py /opt/eero/app/dashboard.py
 systemctl restart eero-dashboard
 echo "✅ Update complete!"
 EOF
