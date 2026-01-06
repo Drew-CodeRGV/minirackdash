@@ -91,6 +91,23 @@ class EeroAPI:
             headers['X-User-Token'] = self.api_token
         return headers
     
+    def get_network_info(self):
+        """Get network information including name"""
+        try:
+            url = f"{self.api_base}/networks/{self.network_id}"
+            response = self.session.get(url, headers=self.get_headers(), timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            if 'data' in data:
+                network_data = data['data']
+                logging.info(f"Retrieved network info: {network_data.get('name', 'Unknown')}")
+                return network_data
+            return {}
+        except Exception as e:
+            logging.error(f"Network info fetch error: {e}")
+            return {}
+    
     def get_all_devices(self):
         """Get all devices"""
         try:
@@ -346,6 +363,24 @@ def get_dashboard_data_filtered(hours):
     filtered_cache['signal_strength_avg'] = filter_data_by_timerange(data_cache['signal_strength_avg'], hours)
     
     return jsonify(filtered_cache)
+
+@app.route('/api/network')
+def get_network_info():
+    """Get network information"""
+    try:
+        network_info = eero_api.get_network_info()
+        return jsonify({
+            'name': network_info.get('name', 'Unknown Network'),
+            'network_id': eero_api.network_id,
+            'success': True
+        })
+    except Exception as e:
+        return jsonify({
+            'name': 'Unknown Network',
+            'network_id': eero_api.network_id,
+            'success': False,
+            'error': str(e)
+        })
 
 @app.route('/api/devices')
 def get_devices():

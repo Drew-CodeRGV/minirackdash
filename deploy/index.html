@@ -23,9 +23,25 @@
             border-bottom: 2px solid rgba(77,166,255,.3); 
         }
         .header-title { 
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .network-name {
             font-size: 18px; 
             font-weight: 600; 
             color: #4da6ff; 
+        }
+        .header-subtitle {
+            font-size: 11px;
+            color: rgba(255,255,255,0.7);
+            font-weight: 400;
+        }
+        .version {
+            color: #4da6ff;
+        }
+        .email {
+            color: rgba(255,255,255,0.6);
         }
         .header-actions { 
             display: flex; 
@@ -447,7 +463,13 @@
 </head>
 <body>
     <div class="header">
-        <div class="header-title">Network Dashboard v5.2.4 (Production)</div>
+        <div class="header-title">
+            <div class="network-name" id="networkName">Network Event Dashboard</div>
+            <div class="header-subtitle">
+                <span class="version">v5.2.4</span> • 
+                <span class="email">drlentz@eero.com</span>
+            </div>
+        </div>
         <div class="header-actions">
             <div class="time-range-selector">
                 <select id="timeRange" onchange="changeTimeRange()">
@@ -651,6 +673,22 @@
                     }
                 }
             });
+        }
+        
+        async function loadNetworkName() {
+            try {
+                const response = await fetch("/api/network");
+                const data = await response.json();
+                
+                if (data.success && data.name !== 'Unknown Network') {
+                    document.getElementById("networkName").textContent = `${data.name} Event Dashboard`;
+                } else {
+                    document.getElementById("networkName").textContent = "Network Event Dashboard";
+                }
+            } catch (error) {
+                console.error("Error loading network name:", error);
+                document.getElementById("networkName").textContent = "Network Event Dashboard";
+            }
         }
         
         async function updateDashboardData() {
@@ -997,6 +1035,8 @@
                 if (data.success) {
                     document.getElementById("adminFormContainer").innerHTML = "";
                     document.getElementById("codeFormContainer").innerHTML = "";
+                    // Reload network name after successful authentication
+                    setTimeout(loadNetworkName, 1000);
                 }
             } catch (error) {
                 showAlert("Failed to verify code", "error");
@@ -1006,8 +1046,10 @@
         // Initialize everything when page loads
         window.addEventListener("load", () => {
             initCharts();
+            loadNetworkName();
             updateDashboardData();
             setInterval(updateDashboardData, 60000); // Update every minute
+            setInterval(loadNetworkName, 300000); // Update network name every 5 minutes
         });
     </script>
 </body>
