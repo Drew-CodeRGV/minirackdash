@@ -9,7 +9,7 @@
 3. **Select**:
    - Platform: Linux/Unix
    - Blueprint: Ubuntu 20.04 LTS
-   - Instance plan: $3.50/month (512 MB RAM, 1 vCPU, 20 GB SSD)
+   - Instance plan: $5.00/month (1 GB RAM, 1 vCPU, 40 GB SSD) - IPv4 enabled
 
 ### **Step 2: Add Boot Script**
 
