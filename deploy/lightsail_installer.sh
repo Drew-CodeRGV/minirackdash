@@ -18,16 +18,17 @@ log "📁 Creating directories..."
 mkdir -p /opt/eero/{app,logs,backups}
 
 # Copy application files from repository
-log "📋 Copying application files..."
-if [ ! -f "deploy/dashboard_minimal.py" ]; then
-    log "❌ dashboard_minimal.py not found"
+log "📋 Downloading application files directly..."
+curl -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
+curl -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
+curl -o /opt/eero/app/config.json https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/config.json
+curl -o /opt/eero/app/requirements.txt https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/requirements.txt
+
+# Verify files downloaded
+if [ ! -f "/opt/eero/app/dashboard.py" ]; then
+    log "❌ Failed to download dashboard.py"
     exit 1
 fi
-
-cp deploy/dashboard_minimal.py /opt/eero/app/dashboard.py
-cp deploy/index.html /opt/eero/app/
-cp deploy/config.json /opt/eero/app/
-cp deploy/requirements.txt /opt/eero/app/
 
 # Create Python virtual environment
 log "🐍 Creating Python virtual environment..."
