@@ -16,7 +16,7 @@ from flask_cors import CORS
 import logging
 
 # Configuration
-VERSION = "6.4.0-fixed"
+VERSION = "6.5.0-complete"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
@@ -400,8 +400,16 @@ def index():
     """Serve main dashboard page"""
     try:
         if os.path.exists(TEMPLATE_FILE):
-            with open(TEMPLATE_FILE, 'r') as f:
-                return f.read()
+            with open(TEMPLATE_FILE, 'r', encoding='utf-8') as f:
+                content = f.read()
+                # Verify we have the full dashboard content
+                if 'showAdmin' in content and 'π' in content and len(content) > 10000:
+                    logging.info("Serving full dashboard template (" + str(len(content)) + " chars)")
+                    return content
+                else:
+                    logging.warning("Template file exists but appears incomplete")
+        else:
+            logging.error("Template file not found: " + TEMPLATE_FILE)
     except Exception as e:
         logging.error("Template load error: " + str(e))
     
@@ -412,6 +420,11 @@ def index():
 <p>Please wait while the dashboard initializes.</p>
 <script>setTimeout(() => location.reload(), 5000);</script>
 </body></html>'''
+
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({'status': 'healthy', 'version': VERSION})
 
 # API Routes (same as full version)
 @app.route('/api/dashboard')
