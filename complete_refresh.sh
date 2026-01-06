@@ -57,8 +57,11 @@ if [ ! -d "venv" ]; then
     sudo -u www-data python3 -m venv venv
 fi
 
-sudo -u www-data /opt/eero/venv/bin/pip install --upgrade pip
-sudo -u www-data /opt/eero/venv/bin/pip install -r app/requirements.txt
+# Fix pip cache permissions and install with proper flags
+sudo mkdir -p /var/www/.cache
+sudo chown -R www-data:www-data /var/www/.cache
+sudo -H -u www-data /opt/eero/venv/bin/pip install --upgrade pip
+sudo -H -u www-data /opt/eero/venv/bin/pip install -r app/requirements.txt
 
 # Test Python file syntax
 echo "🔍 Testing Python syntax..."
