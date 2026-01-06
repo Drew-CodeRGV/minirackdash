@@ -20,7 +20,7 @@ apt-get update -y
 apt-get install -y git
 
 # Set your GitHub repository URL
-REPO_URL="https://github.com/YOUR_USERNAME/minirackdash.git"
+REPO_URL="https://github.com/Drew-CodeRGV/minirackdash.git"
 
 # Clone or update repository
 if [ -d "/opt/eero/repo" ]; then

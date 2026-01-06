@@ -5,9 +5,9 @@
 
 set -e
 
-# Configuration - UPDATE THESE WITH YOUR DETAILS
-GITHUB_USER="YOUR_USERNAME"  # Replace with your GitHub username
-REPO_NAME="minirackdash"     # Replace with your repository name
+# Configuration
+GITHUB_USER="Drew-CodeRGV"
+REPO_NAME="minirackdash"
 GITHUB_REPO="https://github.com/${GITHUB_USER}/${REPO_NAME}.git"
 
 echo "🚀 MiniRack Dashboard - Fresh Installation"

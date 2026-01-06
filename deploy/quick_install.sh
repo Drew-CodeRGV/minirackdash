@@ -2,9 +2,9 @@
 # Quick installer - downloads and runs the fresh install script
 # Usage: curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/minirackdash/main/deploy/quick_install.sh | sudo bash
 
-# Update these with your GitHub details
-GITHUB_USER="YOUR_USERNAME"  # Replace with your actual GitHub username
-REPO_NAME="minirackdash"     # Replace with your actual repository name
+# Configuration
+GITHUB_USER="Drew-CodeRGV"
+REPO_NAME="minirackdash"
 
 echo "🚀 MiniRack Dashboard - Quick Install"
 echo "Downloading fresh installer from GitHub..."

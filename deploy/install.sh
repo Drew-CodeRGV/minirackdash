@@ -4,7 +4,7 @@
 
 set -e
 
-REPO_URL="https://github.com/YOUR_USERNAME/minirackdash.git"
+REPO_URL="https://github.com/Drew-CodeRGV/minirackdash.git"
 INSTALL_DIR="/opt/eero"
 SERVICE_NAME="eero"
 
