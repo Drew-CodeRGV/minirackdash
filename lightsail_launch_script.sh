@@ -353,13 +353,21 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# Configure Nginx
-rm -f /etc/nginx/sites-enabled/default
+# Configure Nginx - PROPERLY this time
+# Remove ALL default nginx configurations
+rm -f /etc/nginx/sites-enabled/*
+rm -f /etc/nginx/sites-available/default
+rm -f /var/www/html/index.nginx-debian.html
+
+# Create our dashboard configuration with HIGHEST priority
 cat > /etc/nginx/sites-available/eero-dashboard << 'EOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
+    
+    # Remove any default root
+    root /nonexistent;
     
     location / {
         proxy_pass http://127.0.0.1:5000;
@@ -367,18 +375,99 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
     }
 }
 EOF
 
-ln -sf /etc/nginx/sites-available/eero-dashboard /etc/nginx/sites-enabled/
+# Enable ONLY our site
+ln -sf /etc/nginx/sites-available/eero-dashboard /etc/nginx/sites-enabled/eero-dashboard
 
-# Start services
+# Test nginx config and fix if needed
+nginx -t || (
+    echo "Nginx config failed, creating minimal config"
+    cat > /etc/nginx/nginx.conf << 'NGINXEOF'
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    gzip on;
+
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        
+        location / {
+            proxy_pass http://127.0.0.1:5000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+NGINXEOF
+)
+
+# Start services - WITH PROPER VERIFICATION
 systemctl daemon-reload
 systemctl enable eero-dashboard
 systemctl start eero-dashboard
+
+# Wait for Flask app to be ready
+echo "Waiting for Flask app to start..."
+for i in {1..30}; do
+    if curl -f http://localhost:5000/health > /dev/null 2>&1; then
+        echo "Flask app is ready!"
+        break
+    fi
+    if [ $i -eq 30 ]; then
+        echo "Flask app failed to start!"
+        systemctl status eero-dashboard
+        exit 1
+    fi
+    sleep 2
+done
+
+# Now start nginx
 systemctl enable nginx
 systemctl restart nginx
+
+# Verify nginx is proxying correctly
+echo "Testing nginx proxy..."
+for i in {1..10}; do
+    if curl -f http://localhost/ | grep -q "MiniRack Dashboard" 2>/dev/null; then
+        echo "Nginx proxy working!"
+        break
+    fi
+    if [ $i -eq 10 ]; then
+        echo "Nginx proxy failed!"
+        systemctl status nginx
+        curl -v http://localhost/
+        exit 1
+    fi
+    sleep 2
+done
 
 # Configure firewall
 ufw allow 80/tcp
