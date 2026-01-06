@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Network Dashboard v6.5.1 (Fixed JS)</title>
+    <title>Network Dashboard v6.5.2 (JS Fixed)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -415,7 +415,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.5.1</span> • 
+                <span class="version">v6.5.2</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -696,7 +696,6 @@
                 
                 // Update last update time
                 const lastUpdate = new Date(data.last_update);
-                const lastSuccessful = data.last_successful_update ? new Date(data.last_successful_update) : lastUpdate;
                 const timeDiff = Math.floor((now - lastUpdate) / 1000);
                 
                 let updateText;

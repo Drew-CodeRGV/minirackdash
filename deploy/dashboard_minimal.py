@@ -16,7 +16,7 @@ from flask_cors import CORS
 import logging
 
 # Configuration
-VERSION = "6.5.1-fixed-js"
+VERSION = "6.5.2-js-fixed"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
