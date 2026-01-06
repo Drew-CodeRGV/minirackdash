@@ -10,7 +10,8 @@ echo "📦 Setting up MiniRack Dashboard from GitHub..."
 mkdir -p /opt/eero/{app,logs,backups}
 
 # Copy application files from repository
-cp deploy/dashboard_full.py /opt/eero/app/dashboard.py
+cp deploy/dashboard_minimal.py /opt/eero/app/dashboard.py
+cp deploy/index.html /opt/eero/app/
 cp deploy/config.json /opt/eero/app/
 cp deploy/requirements.txt /opt/eero/app/
 
@@ -73,7 +74,8 @@ cd /tmp
 rm -rf minirackdash
 git clone -b eeroNetworkDash https://github.com/Drew-CodeRGV/minirackdash.git
 cd minirackdash
-cp deploy/dashboard_full.py /opt/eero/app/dashboard.py
+cp deploy/dashboard_minimal.py /opt/eero/app/dashboard.py
+cp deploy/index.html /opt/eero/app/
 systemctl restart eero-dashboard
 echo "✅ Update complete!"
 EOF
