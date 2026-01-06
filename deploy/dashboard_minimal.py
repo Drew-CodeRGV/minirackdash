@@ -570,6 +570,7 @@ def reauthorize():
             if not email or '@' not in email:
                 return jsonify({'success': False, 'message': 'Invalid email'}), 400
             
+            logging.info(f"Sending verification code to {email}")
             response = requests.post(
                 f"https://{eero_api.api_url}/2.2/pro/login",
                 json={"login": email},
@@ -578,11 +579,14 @@ def reauthorize():
             response.raise_for_status()
             response_data = response.json()
             
+            logging.info(f"Login response: {response_data}")
+            
             if 'data' not in response_data or 'user_token' not in response_data['data']:
                 return jsonify({'success': False, 'message': 'Failed to generate token'}), 500
             
             with open(TOKEN_FILE + '.temp', 'w') as f:
                 f.write(response_data['data']['user_token'])
+            os.chmod(TOKEN_FILE + '.temp', 0o600)
             
             return jsonify({'success': True, 'message': 'Verification code sent to email'})
             
@@ -598,30 +602,74 @@ def reauthorize():
             with open(temp_file, 'r') as f:
                 token = f.read().strip()
             
-            verify_response = requests.post(
-                f"https://{eero_api.api_url}/2.2/login/verify",
-                headers={"X-User-Token": token},
-                data={"code": code},
-                timeout=10
-            )
-            verify_response.raise_for_status()
-            verify_data = verify_response.json()
+            logging.info(f"Verifying code: {code}")
             
-            if verify_data.get('data', {}).get('email', {}).get('verified'):
-                with open(TOKEN_FILE, 'w') as f:
-                    f.write(token)
-                os.chmod(TOKEN_FILE, 0o600)
-                
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
-                
-                eero_api.api_token = token
-                return jsonify({'success': True, 'message': 'Authentication successful!'})
+            # Try both form data and JSON for verification
+            verify_methods = [
+                # Method 1: Form data (original eero API format)
+                lambda: requests.post(
+                    f"https://{eero_api.api_url}/2.2/login/verify",
+                    headers={"X-User-Token": token, "Content-Type": "application/x-www-form-urlencoded"},
+                    data={"code": code},
+                    timeout=10
+                ),
+                # Method 2: JSON data
+                lambda: requests.post(
+                    f"https://{eero_api.api_url}/2.2/login/verify",
+                    headers={"X-User-Token": token, "Content-Type": "application/json"},
+                    json={"code": code},
+                    timeout=10
+                )
+            ]
             
-            return jsonify({'success': False, 'message': 'Verification failed'}), 400
+            verify_response = None
+            for i, method in enumerate(verify_methods):
+                try:
+                    verify_response = method()
+                    verify_response.raise_for_status()
+                    verify_data = verify_response.json()
+                    logging.info(f"Verify method {i+1} response: {verify_data}")
+                    
+                    # Check for successful verification
+                    if (verify_data.get('data', {}).get('email', {}).get('verified') or 
+                        verify_data.get('data', {}).get('verified') or
+                        verify_response.status_code == 200):
+                        
+                        # Save the token
+                        with open(TOKEN_FILE, 'w') as f:
+                            f.write(token)
+                        os.chmod(TOKEN_FILE, 0o600)
+                        
+                        # Clean up temp file
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                        
+                        # Update API token
+                        eero_api.api_token = token
+                        logging.info("Authentication successful")
+                        
+                        return jsonify({'success': True, 'message': 'Authentication successful!'})
+                    
+                except requests.RequestException as e:
+                    logging.warning(f"Verify method {i+1} failed: {str(e)}")
+                    continue
+                except Exception as e:
+                    logging.warning(f"Verify method {i+1} exception: {str(e)}")
+                    continue
             
+            # If we get here, all methods failed
+            if verify_response:
+                logging.error(f"Verification failed. Last response: {verify_response.text}")
+                return jsonify({'success': False, 'message': f'Verification failed. Please check the code and try again.'}), 400
+            else:
+                return jsonify({'success': False, 'message': 'Network error during verification. Please try again.'}), 500
+            
+    except requests.RequestException as e:
+        logging.error(f"Network error during reauthorization: {str(e)}")
+        return jsonify({'success': False, 'message': f'Network error: {str(e)}'}), 500
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        logging.error(f"Reauthorization error: {str(e)}")
+        return jsonify({'success': False, 'message': f'Authentication error: {str(e)}'}), 500
 
 if __name__ == '__main__':
     logging.info(f"Starting MiniRack Dashboard {VERSION}")
