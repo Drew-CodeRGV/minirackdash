@@ -16,7 +16,8 @@ cp deploy/requirements.txt /opt/eero/app/
 
 # Install Python dependencies
 cd /opt/eero/app
-pip3 install -r requirements.txt
+apt-get install -y python3-flask python3-requests
+pip3 install --break-system-packages -r requirements.txt
 
 # Set permissions
 chown -R www-data:www-data /opt/eero

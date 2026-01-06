@@ -13,7 +13,8 @@ apt-get update -y
 apt-get install -y python3-pip nginx git curl
 
 # Install Python packages
-pip3 install flask flask-cors requests speedtest-cli gunicorn
+apt-get install -y python3-flask python3-requests python3-pip
+pip3 install --break-system-packages flask-cors speedtest-cli gunicorn
 
 # Clone repository
 cd /tmp
