@@ -244,17 +244,17 @@ def update_cache():
                 'signal_quality': signal_quality
             })
         
-        # Update connected users history (keep last 20 points)
+        # Update connected users history (keep last 168 points for 1 week of hourly data)
         current_time = datetime.now()
         connected_users = data_cache.get('connected_users', [])
         connected_users.append({
             'timestamp': current_time.isoformat(),
             'count': len(wireless_devices)
         })
-        if len(connected_users) > 20:
-            connected_users = connected_users[-20:]
+        if len(connected_users) > 168:  # Keep 1 week of hourly data
+            connected_users = connected_users[-168:]
         
-        # Update signal strength history (keep last 20 points)
+        # Update signal strength history (keep last 168 points for 1 week of hourly data)
         signal_strength_avg = data_cache.get('signal_strength_avg', [])
         if signal_values:
             avg_signal = sum(signal_values) / len(signal_values)
@@ -262,8 +262,8 @@ def update_cache():
                 'timestamp': current_time.isoformat(),
                 'avg_dbm': round(avg_signal, 1)
             })
-        if len(signal_strength_avg) > 20:
-            signal_strength_avg = signal_strength_avg[-20:]
+        if len(signal_strength_avg) > 168:  # Keep 1 week of hourly data
+            signal_strength_avg = signal_strength_avg[-168:]
         
         # Update cache
         data_cache.update({
@@ -279,6 +279,17 @@ def update_cache():
         
     except Exception as e:
         logging.error(f"Cache update error: {e}")
+
+def filter_data_by_timerange(data, hours):
+    """Filter time-series data by hours"""
+    if not data or hours == 0:
+        return data
+    
+    cutoff_time = datetime.now() - timedelta(hours=hours)
+    return [
+        entry for entry in data 
+        if datetime.fromisoformat(entry['timestamp']) >= cutoff_time
+    ]
 
 def run_speedtest():
     """Run speed test"""
@@ -323,6 +334,18 @@ def index():
 def get_dashboard_data():
     update_cache()
     return jsonify(data_cache)
+
+@app.route('/api/dashboard/<int:hours>')
+def get_dashboard_data_filtered(hours):
+    """Get dashboard data filtered by time range"""
+    update_cache()
+    filtered_cache = data_cache.copy()
+    
+    # Filter time-series data
+    filtered_cache['connected_users'] = filter_data_by_timerange(data_cache['connected_users'], hours)
+    filtered_cache['signal_strength_avg'] = filter_data_by_timerange(data_cache['signal_strength_avg'], hours)
+    
+    return jsonify(filtered_cache)
 
 @app.route('/api/devices')
 def get_devices():

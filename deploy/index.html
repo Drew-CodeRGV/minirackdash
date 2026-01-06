@@ -32,6 +32,19 @@
             gap: 10px; 
             align-items: center; 
         }
+        .time-range-selector select {
+            background: rgba(0,40,80,.7);
+            border: 2px solid #4da6ff;
+            border-radius: 6px;
+            color: #fff;
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .time-range-selector select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
         .header-btn { 
             padding: 6px 12px; 
             background: rgba(77,166,255,.2); 
@@ -436,6 +449,16 @@
     <div class="header">
         <div class="header-title">Network Dashboard v5.2.4 (Production)</div>
         <div class="header-actions">
+            <div class="time-range-selector">
+                <select id="timeRange" onchange="changeTimeRange()">
+                    <option value="1">Last Hour</option>
+                    <option value="4">Last 4 Hours</option>
+                    <option value="8">Last 8 Hours</option>
+                    <option value="12">Last 12 Hours</option>
+                    <option value="24">Last 24 Hours</option>
+                    <option value="168">Last Week</option>
+                </select>
+            </div>
             <div class="status-indicator">
                 <div class="status-dot"></div>
                 <span id="lastUpdate">Loading...</span>
@@ -537,6 +560,12 @@
         let charts = {};
         let speedtestInterval = null;
         let isConfigured = false;
+        let currentTimeRange = 1; // Default to 1 hour
+        
+        function changeTimeRange() {
+            currentTimeRange = parseInt(document.getElementById('timeRange').value);
+            updateDashboardData();
+        }
         
         function initCharts() {
             const commonOptions = {
@@ -626,7 +655,7 @@
         
         async function updateDashboardData() {
             try {
-                const response = await fetch("/api/dashboard");
+                const response = await fetch(`/api/dashboard/${currentTimeRange}`);
                 const data = await response.json();
                 
                 // Check if we have data (indicates configuration is working)
@@ -811,6 +840,11 @@
                 const response = await fetch("/api/version");
                 const data = await response.json();
                 
+                const networkId = data.network_id || 'Not configured';
+                const networkIdDisplay = networkId !== 'Not configured' 
+                    ? `<a href="https://insight.eero.com/networks/${networkId}" target="_blank" style="color: #4da6ff; text-decoration: none;">${networkId} <i class="fas fa-external-link-alt" style="font-size: 10px;"></i></a>`
+                    : networkId;
+                
                 document.getElementById("adminInfo").innerHTML = `
                     <div class="admin-info-item">
                         <span>Version:</span>
@@ -818,7 +852,7 @@
                     </div>
                     <div class="admin-info-item">
                         <span>Network ID:</span>
-                        <span>${data.network_id || 'Not configured'}</span>
+                        <span>${networkIdDisplay}</span>
                     </div>
                     <div class="admin-info-item">
                         <span>Environment:</span>
