@@ -557,10 +557,10 @@
             charts.deviceOS = new Chart(document.getElementById("deviceOSChart").getContext("2d"), {
                 type: "doughnut",
                 data: {
-                    labels: ["iOS", "Android", "Windows", "Other"],
+                    labels: ["iOS", "Android", "Windows", "Amazon", "Other"],
                     datasets: [{
-                        data: [0, 0, 0, 0],
-                        backgroundColor: ["#4da6ff", "#51cf66", "#74c0fc", "#ffd43b"]
+                        data: [0, 0, 0, 0, 0],
+                        backgroundColor: ["#4da6ff", "#51cf66", "#74c0fc", "#ff922b", "#ffd43b"]
                     }]
                 },
                 options: commonOptions
@@ -636,31 +636,36 @@
                 charts.users.data.labels = data.connected_users.map(entry => 
                     new Date(entry.timestamp).toLocaleTimeString()
                 );
-                charts.users.data.datasets[0].data = data.connected_users.map(entry => entry.count);
+                charts.users.data.datasets[0].data = data.connected_users.map(entry => Math.round(entry.count));
                 charts.users.update();
                 
                 // Update Device OS Chart
                 const deviceOS = data.device_os || {};
-                charts.deviceOS.data.datasets[0].data = [
-                    deviceOS.iOS || 0,
-                    deviceOS.Android || 0,
-                    deviceOS.Windows || 0,
-                    deviceOS.Other || 0
+                const deviceCounts = [
+                    Math.round(deviceOS.iOS || 0),
+                    Math.round(deviceOS.Android || 0),
+                    Math.round(deviceOS.Windows || 0),
+                    Math.round(deviceOS.Amazon || 0),
+                    Math.round(deviceOS.Other || 0)
                 ];
+                charts.deviceOS.data.datasets[0].data = deviceCounts;
                 charts.deviceOS.update();
-                document.getElementById("deviceOsSubtitle").textContent = 
-                    `${Object.values(deviceOS).reduce((a, b) => a + b, 0)} devices`;
+                
+                const totalDevices = deviceCounts.reduce((a, b) => a + b, 0);
+                document.getElementById("deviceOsSubtitle").textContent = `${totalDevices} devices`;
                 
                 // Update Frequency Chart
                 const freqDist = data.frequency_distribution || {};
-                charts.frequency.data.datasets[0].data = [
-                    freqDist["2.4GHz"] || 0,
-                    freqDist["5GHz"] || 0,
-                    freqDist["6GHz"] || 0
+                const freqCounts = [
+                    Math.round(freqDist["2.4GHz"] || 0),
+                    Math.round(freqDist["5GHz"] || 0),
+                    Math.round(freqDist["6GHz"] || 0)
                 ];
+                charts.frequency.data.datasets[0].data = freqCounts;
                 charts.frequency.update();
-                document.getElementById("frequencySubtitle").textContent = 
-                    `${(freqDist["2.4GHz"] || 0) + (freqDist["5GHz"] || 0) + (freqDist["6GHz"] || 0)} devices`;
+                
+                const totalFreqDevices = freqCounts.reduce((a, b) => a + b, 0);
+                document.getElementById("frequencySubtitle").textContent = `${totalFreqDevices} devices`;
                 
                 // Update Signal Strength Chart
                 charts.signalStrength.data.labels = data.signal_strength_avg.map(entry => 

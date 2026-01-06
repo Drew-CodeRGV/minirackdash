@@ -143,7 +143,9 @@ def detect_device_os(device):
     hostname = str(device.get('hostname', '')).lower()
     text = f"{manufacturer} {hostname}"
     
-    if any(k in text for k in ['apple', 'iphone', 'ipad', 'mac', 'ios']):
+    if any(k in text for k in ['amazon', 'echo', 'alexa', 'fire tv', 'kindle']):
+        return 'Amazon'
+    elif any(k in text for k in ['apple', 'iphone', 'ipad', 'mac', 'ios']):
         return 'iOS'
     elif any(k in text for k in ['android', 'samsung', 'google', 'pixel', 'lg', 'htc']):
         return 'Android'
@@ -219,7 +221,7 @@ def update_cache():
         
         # Process devices for detailed view
         device_list = []
-        os_counts = {'iOS': 0, 'Android': 0, 'Windows': 0, 'Other': 0}
+        os_counts = {'iOS': 0, 'Android': 0, 'Windows': 0, 'Amazon': 0, 'Other': 0}
         freq_counts = {'2.4GHz': 0, '5GHz': 0, '6GHz': 0}
         signal_values = []
         
