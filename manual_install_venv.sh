@@ -101,7 +101,6 @@ git clone -b eeroNetworkDash https://github.com/Drew-CodeRGV/minirackdash.git
 cd minirackdash
 cp deploy/dashboard_minimal.py /opt/eero/app/dashboard.py
 cp deploy/index.html /opt/eero/app/
-cp deploy/config.json /opt/eero/app/
 chown -R www-data:www-data /opt/eero
 systemctl restart eero-dashboard
 echo "✅ Update complete!"

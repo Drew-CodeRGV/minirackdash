@@ -67,6 +67,7 @@ ln -s /etc/nginx/sites-available/eero-dashboard /etc/nginx/sites-enabled/
 nginx -t
 
 # Create update script
+# Create update script
 cat > /opt/eero/update.sh << 'EOF'
 #!/bin/bash
 echo "🔄 Updating MiniRack Dashboard from GitHub..."
