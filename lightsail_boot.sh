@@ -341,38 +341,54 @@ SERVICE_EOF
 # Configure Nginx for port 80
 log "🌐 Configuring Nginx..."
 
-# Remove default nginx site first
-rm -f /etc/nginx/sites-enabled/default
-rm -f /etc/nginx/sites-available/default
+# COMPLETELY remove nginx defaults
+systemctl stop nginx || true
+rm -rf /etc/nginx/sites-enabled/*
+rm -rf /etc/nginx/sites-available/default
+rm -f /var/www/html/index.nginx-debian.html
+rm -f /var/www/html/index.html
 
-# Create our dashboard configuration
-cat > /etc/nginx/sites-available/eero-dashboard << 'NGINX_EOF'
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
-    server_name _;
-    
-    # Security headers
-    add_header X-Frame-Options DENY;
-    add_header X-Content-Type-Options nosniff;
-    
-    location / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_connect_timeout 30s;
-        proxy_send_timeout 30s;
-        proxy_read_timeout 30s;
-        proxy_buffering off;
-    }
-    
-    # Health check endpoint
-    location /health {
-        access_log off;
-        return 200 "healthy\n";
-        add_header Content-Type text/plain;
+# Create nginx config that ONLY serves our dashboard
+cat > /etc/nginx/nginx.conf << 'NGINX_EOF'
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    gzip on;
+
+    server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        server_name _;
+        
+        location / {
+            proxy_pass http://127.0.0.1:5000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
+        }
     }
 }
 NGINX_EOF
