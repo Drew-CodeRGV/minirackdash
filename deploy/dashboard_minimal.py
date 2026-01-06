@@ -7,7 +7,6 @@ import os
 import sys
 import json
 import requests
-import speedtest
 import threading
 import time
 import subprocess
@@ -135,9 +134,7 @@ data_cache = {
     'frequency_distribution': {},
     'signal_strength_avg': [],
     'devices': [],
-    'last_update': None,
-    'speedtest_running': False,
-    'speedtest_result': None
+    'last_update': None
 }
 
 def detect_device_os(device):
@@ -308,25 +305,6 @@ def filter_data_by_timerange(data, hours):
         if datetime.fromisoformat(entry['timestamp']) >= cutoff_time
     ]
 
-def run_speedtest():
-    """Run speed test"""
-    global data_cache
-    try:
-        data_cache['speedtest_running'] = True
-        st = speedtest.Speedtest()
-        st.get_best_server()
-        
-        data_cache['speedtest_result'] = {
-            'download': round(st.download() / 1_000_000, 2),
-            'upload': round(st.upload() / 1_000_000, 2),
-            'ping': round(st.results.ping, 2),
-            'timestamp': datetime.now().isoformat()
-        }
-    except Exception as e:
-        data_cache['speedtest_result'] = {'error': str(e)}
-    finally:
-        data_cache['speedtest_running'] = False
-
 # Routes - Exact replica of macOS version
 @app.route('/')
 def index():
@@ -387,20 +365,6 @@ def get_devices():
     return jsonify({
         'devices': data_cache.get('devices', []),
         'count': len(data_cache.get('devices', []))
-    })
-
-@app.route('/api/speedtest/start', methods=['POST'])
-def start_speedtest():
-    if data_cache['speedtest_running']:
-        return jsonify({'status': 'already running'}), 409
-    threading.Thread(target=run_speedtest, daemon=True).start()
-    return jsonify({'status': 'started'})
-
-@app.route('/api/speedtest/status')
-def get_speedtest_status():
-    return jsonify({
-        'running': data_cache['speedtest_running'],
-        'result': data_cache['speedtest_result']
     })
 
 @app.route('/api/version')

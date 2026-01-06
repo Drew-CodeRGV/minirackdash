@@ -275,57 +275,6 @@
             transition: width .3s; 
         }
         
-        .speedtest-content { 
-            text-align: center; 
-        }
-        .speedtest-btn { 
-            padding: 15px 30px; 
-            background: linear-gradient(135deg, #4da6ff 0%, #667eea 100%); 
-            border: none; 
-            border-radius: 10px; 
-            color: #fff; 
-            font-size: 16px; 
-            font-weight: 600; 
-            cursor: pointer; 
-            margin: 20px 0; 
-            transition: all .3s; 
-        }
-        .speedtest-btn:hover { 
-            transform: translateY(-2px); 
-            box-shadow: 0 5px 20px rgba(77,166,255,.4); 
-        }
-        .speedtest-btn:disabled { 
-            opacity: .5; 
-            cursor: not-allowed; 
-        }
-        .speedtest-results { 
-            display: grid; 
-            grid-template-columns: repeat(3, 1fr); 
-            gap: 20px; 
-            margin-top: 30px; 
-        }
-        .speedtest-metric { 
-            background: rgba(0,40,80,.5); 
-            padding: 20px; 
-            border-radius: 10px; 
-            border: 1px solid rgba(77,166,255,.2); 
-        }
-        .speedtest-label { 
-            font-size: 12px; 
-            color: rgba(255,255,255,.6); 
-            margin-bottom: 8px; 
-            text-transform: uppercase; 
-        }
-        .speedtest-value { 
-            font-size: 32px; 
-            font-weight: 700; 
-            color: #4da6ff; 
-        }
-        .speedtest-unit { 
-            font-size: 14px; 
-            color: rgba(255,255,255,.7); 
-            margin-left: 5px; 
-        }
         .spinner { 
             border: 4px solid rgba(255,255,255,.1); 
             border-top: 4px solid #4da6ff; 
@@ -488,9 +437,6 @@
             <button class="header-btn" onclick="showDevices()">
                 <i class="fas fa-list"></i><span>Devices</span>
             </button>
-            <button class="header-btn" onclick="openModal('speedtestModal')">
-                <i class="fas fa-gauge-high"></i><span>Speed Test</span>
-            </button>
         </div>
     </div>
     
@@ -537,23 +483,6 @@
         </div>
     </div>
     
-    <!-- Speed Test Modal -->
-    <div id="speedtestModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Speed Test</h2>
-                <button class="modal-close" onclick="closeModal('speedtestModal')">&times;</button>
-            </div>
-            <div class="speedtest-content">
-                <button id="startSpeedtest" class="speedtest-btn" onclick="runSpeedTest()">
-                    Start Speed Test
-                </button>
-                <div id="speedtestStatus"></div>
-                <div id="speedtestResults"></div>
-            </div>
-        </div>
-    </div>
-    
     <!-- Admin Modal -->
     <div id="adminModal" class="modal">
         <div class="modal-content">
@@ -580,7 +509,6 @@
     
     <script>
         let charts = {};
-        let speedtestInterval = null;
         let isConfigured = false;
         let currentTimeRange = 1; // Default to 1 hour
         
@@ -814,57 +742,6 @@
                 openModal("devicesModal");
             } catch (error) {
                 console.error("Error loading devices:", error);
-            }
-        }
-        
-        async function runSpeedTest() {
-            const button = document.getElementById("startSpeedtest");
-            const status = document.getElementById("speedtestStatus");
-            const results = document.getElementById("speedtestResults");
-            
-            button.disabled = true;
-            status.innerHTML = '<div class="spinner"></div><p>Running speed test...</p>';
-            results.innerHTML = "";
-            
-            try {
-                await fetch("/api/speedtest/start", { method: "POST" });
-                
-                speedtestInterval = setInterval(async () => {
-                    const response = await fetch("/api/speedtest/status");
-                    const data = await response.json();
-                    
-                    if (!data.running && data.result) {
-                        clearInterval(speedtestInterval);
-                        button.disabled = false;
-                        status.innerHTML = "";
-                        
-                        if (data.result.error) {
-                            results.innerHTML = `<div class="alert alert-error">Error: ${data.result.error}</div>`;
-                        } else {
-                            results.innerHTML = `
-                                <div class="speedtest-results">
-                                    <div class="speedtest-metric">
-                                        <div class="speedtest-label">Download</div>
-                                        <div class="speedtest-value">${data.result.download}<span class="speedtest-unit">Mbps</span></div>
-                                    </div>
-                                    <div class="speedtest-metric">
-                                        <div class="speedtest-label">Upload</div>
-                                        <div class="speedtest-value">${data.result.upload}<span class="speedtest-unit">Mbps</span></div>
-                                    </div>
-                                    <div class="speedtest-metric">
-                                        <div class="speedtest-label">Ping</div>
-                                        <div class="speedtest-value">${data.result.ping}<span class="speedtest-unit">ms</span></div>
-                                    </div>
-                                </div>
-                            `;
-                        }
-                    }
-                }, 2000);
-                
-            } catch (error) {
-                button.disabled = false;
-                status.innerHTML = "";
-                results.innerHTML = '<div class="alert alert-error">Failed to start speed test</div>';
             }
         }
         
