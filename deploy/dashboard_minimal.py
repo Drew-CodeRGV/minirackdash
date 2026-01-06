@@ -14,9 +14,10 @@ from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import logging
+import pytz
 
 # Configuration
-VERSION = "6.5.2-js-fixed"
+VERSION = "6.6.0-timezone"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
@@ -47,7 +48,8 @@ def load_config():
     return {
         "network_id": "20478317",
         "environment": "production",
-        "api_url": "api-user.e2ro.com"
+        "api_url": "api-user.e2ro.com",
+        "timezone": "UTC"
     }
 
 def save_config(config):
@@ -60,6 +62,17 @@ def save_config(config):
     except Exception as e:
         logging.error("Config save error: " + str(e))
         return False
+
+def get_timezone_aware_now():
+    """Get current time in configured timezone"""
+    try:
+        config = load_config()
+        tz_name = config.get('timezone', 'UTC')
+        tz = pytz.timezone(tz_name)
+        return datetime.now(tz)
+    except Exception as e:
+        logging.warning("Timezone error, using UTC: " + str(e))
+        return datetime.now(pytz.UTC)
 
 class EeroAPI:
     def __init__(self):
@@ -271,7 +284,7 @@ def update_cache():
         if not all_devices:
             logging.warning("No devices returned from API - keeping previous cache")
             if 'last_update' in data_cache:
-                data_cache['last_update'] = datetime.now().isoformat()
+                data_cache['last_update'] = get_timezone_aware_now().isoformat()
             return
         
         # Include both wired and wireless connected devices
@@ -341,7 +354,7 @@ def update_cache():
             })
         
         # Update connected users history (keep last 168 points for 1 week of hourly data)
-        current_time = datetime.now()
+        current_time = get_timezone_aware_now()
         connected_users = data_cache.get('connected_users', [])
         connected_users.append({
             'timestamp': current_time.isoformat(),
@@ -381,14 +394,14 @@ def update_cache():
         logging.error("Cache update error: " + str(e))
         # Update last_update timestamp even on error, but keep last_successful_update unchanged
         if 'last_update' in data_cache:
-            data_cache['last_update'] = datetime.now().isoformat()
+            data_cache['last_update'] = get_timezone_aware_now().isoformat()
 
 def filter_data_by_timerange(data, hours):
     """Filter time-series data by hours"""
     if not data or hours == 0:
         return data
     
-    cutoff_time = datetime.now() - timedelta(hours=hours)
+    cutoff_time = get_timezone_aware_now() - timedelta(hours=hours)
     return [
         entry for entry in data 
         if datetime.fromisoformat(entry['timestamp']) >= cutoff_time
@@ -472,13 +485,16 @@ def get_devices():
 @app.route('/api/version')
 def get_version():
     config = load_config()
+    current_time = get_timezone_aware_now()
     return jsonify({
         'version': VERSION,
         'network_id': config.get('network_id'),
         'environment': config.get('environment', 'production'),
         'api_url': config.get('api_url', 'api-user.e2ro.com'),
+        'timezone': config.get('timezone', 'UTC'),
         'authenticated': eero_api.api_token is not None,
-        'timestamp': datetime.now().isoformat()
+        'timestamp': current_time.isoformat(),
+        'local_time': current_time.strftime('%Y-%m-%d %H:%M:%S %Z')
     })
 
 @app.route('/api/admin/update', methods=['POST'])
@@ -590,6 +606,29 @@ def update_dashboard():
             'success': False, 
             'message': 'Update error: ' + str(e)
         }), 500
+
+@app.route('/api/admin/timezone', methods=['POST'])
+def change_timezone():
+    try:
+        data = request.get_json()
+        new_timezone = data.get('timezone', '').strip()
+        
+        # Validate timezone
+        try:
+            pytz.timezone(new_timezone)
+        except pytz.exceptions.UnknownTimeZoneError:
+            return jsonify({'success': False, 'message': 'Invalid timezone'}), 400
+        
+        config = load_config()
+        config['timezone'] = new_timezone
+        
+        if save_config(config):
+            return jsonify({'success': True, 'message': 'Timezone updated to ' + new_timezone})
+        
+        return jsonify({'success': False, 'message': 'Failed to save configuration'}), 500
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/admin/network-id', methods=['POST'])
 def change_network_id():

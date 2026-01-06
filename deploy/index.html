@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Network Dashboard v6.5.2 (JS Fixed)</title>
+    <title>Network Dashboard v6.6.0 (Timezone)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -415,7 +415,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.5.2</span> • 
+                <span class="version">v6.6.0</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -497,6 +497,9 @@
                 </button>
                 <button class="admin-btn" onclick="showNetworkIdForm()">
                     <i class="fas fa-network-wired"></i><span>Change Network ID</span>
+                </button>
+                <button class="admin-btn" onclick="showTimezoneForm()">
+                    <i class="fas fa-clock"></i><span>Change Timezone</span>
                 </button>
                 <button class="admin-btn" onclick="showReauthorizeForm()">
                     <i class="fas fa-key"></i><span>Reauthorize API</span>
@@ -837,6 +840,14 @@
                         <span>API URL:</span>
                         <span>${data.api_url}</span>
                     </div>
+                    <div class="admin-info-item">
+                        <span>Timezone:</span>
+                        <span>${data.timezone || 'UTC'}</span>
+                    </div>
+                    <div class="admin-info-item">
+                        <span>Local Time:</span>
+                        <span>${data.local_time || 'Unknown'}</span>
+                    </div>
                 `;
             } catch (error) {
                 console.error("Error loading admin info:", error);
@@ -901,6 +912,52 @@
                 }
             } catch (error) {
                 showAlert("Failed to update network ID", "error");
+            }
+        }
+        
+        function showTimezoneForm() {
+            document.getElementById("adminFormContainer").innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">Timezone:</label>
+                    <select id="newTimezone" class="form-input">
+                        <option value="UTC">UTC</option>
+                        <option value="US/Eastern">US/Eastern (EST/EDT)</option>
+                        <option value="US/Central">US/Central (CST/CDT)</option>
+                        <option value="US/Mountain">US/Mountain (MST/MDT)</option>
+                        <option value="US/Pacific">US/Pacific (PST/PDT)</option>
+                        <option value="Europe/London">Europe/London (GMT/BST)</option>
+                        <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                        <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                        <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
+                    </select>
+                    <button class="form-btn" style="margin-top:10px" onclick="changeTimezone()">
+                        Update Timezone
+                    </button>
+                </div>
+            `;
+        }
+        
+        async function changeTimezone() {
+            const newTimezone = document.getElementById("newTimezone").value;
+            
+            try {
+                const response = await fetch("/api/admin/timezone", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ timezone: newTimezone })
+                });
+                
+                const data = await response.json();
+                showAlert(data.message, data.success ? "success" : "error");
+                
+                if (data.success) {
+                    document.getElementById("adminFormContainer").innerHTML = "";
+                    setTimeout(() => {
+                        loadAdminInfo(); // Refresh admin info to show new timezone
+                    }, 1000);
+                }
+            } catch (error) {
+                showAlert("Failed to update timezone", "error");
             }
         }
         
