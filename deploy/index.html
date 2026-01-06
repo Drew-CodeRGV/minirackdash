@@ -442,23 +442,23 @@
     
     <div class="dashboard-container">
         <div class="chart-card">
-            <div class="chart-title">Connected Users</div>
-            <div class="chart-subtitle">Wireless devices over time</div>
+            <div class="chart-title">Connected Devices</div>
+            <div class="chart-subtitle">All connected devices over time</div>
             <div class="chart-container"><canvas id="usersChart"></canvas></div>
         </div>
         <div class="chart-card">
-            <div class="chart-title">Device OS</div>
+            <div class="chart-title">Device Types</div>
             <div class="chart-subtitle" id="deviceOsSubtitle">Loading...</div>
             <div class="chart-container"><canvas id="deviceOSChart"></canvas></div>
         </div>
         <div class="chart-card">
             <div class="chart-title">Frequency Distribution</div>
-            <div class="chart-subtitle" id="frequencySubtitle">Loading...</div>
+            <div class="chart-subtitle" id="frequencySubtitle">Wireless devices only</div>
             <div class="chart-container"><canvas id="frequencyChart"></canvas></div>
         </div>
         <div class="chart-card">
             <div class="chart-title">Average Signal Strength</div>
-            <div class="chart-subtitle">Network-wide average (dBm)</div>
+            <div class="chart-subtitle">Wireless devices only (dBm)</div>
             <div class="chart-container"><canvas id="signalStrengthChart"></canvas></div>
         </div>
     </div>
@@ -493,7 +493,7 @@
             <div class="admin-info" id="adminInfo"></div>
             <div class="admin-menu">
                 <button class="admin-btn" onclick="updateDashboard()">
-                    <i class="fas fa-sync"></i><span>Update Dashboard</span>
+                    <i class="fas fa-sync"></i><span>Check for Updated Dashboard Code</span>
                 </button>
                 <button class="admin-btn" onclick="showNetworkIdForm()">
                     <i class="fas fa-network-wired"></i><span>Change Network ID</span>
@@ -658,9 +658,11 @@
                 charts.deviceOS.update();
                 
                 const totalDevices = deviceCounts.reduce((a, b) => a + b, 0);
-                document.getElementById("deviceOsSubtitle").textContent = `${totalDevices} devices`;
+                const wirelessCount = data.wireless_devices || 0;
+                const wiredCount = data.wired_devices || 0;
+                document.getElementById("deviceOsSubtitle").textContent = `${totalDevices} devices (${wirelessCount} wireless, ${wiredCount} wired)`;
                 
-                // Update Frequency Chart (use current data, not time-filtered)
+                // Update Frequency Chart (wireless devices only)
                 const freqDist = data.frequency_distribution || {};
                 const freqCounts = [
                     Math.round(freqDist["2.4GHz"] || 0),
@@ -671,7 +673,7 @@
                 charts.frequency.update();
                 
                 const totalFreqDevices = freqCounts.reduce((a, b) => a + b, 0);
-                document.getElementById("frequencySubtitle").textContent = `${totalFreqDevices} devices`;
+                document.getElementById("frequencySubtitle").textContent = `${totalFreqDevices} wireless devices`;
                 
                 // Update Signal Strength Chart
                 charts.signalStrength.data.labels = filteredData.signal_strength_avg.map(entry => 
@@ -734,7 +736,7 @@
                 } else {
                     container.innerHTML = data.devices.map(device => `
                         <div class="device-item">
-                            <div class="device-name">${device.name}</div>
+                            <div class="device-name">${device.name} ${device.connection_type === 'Wired' ? '<span style="color: #51cf66; font-size: 12px;">[Wired]</span>' : '<span style="color: #4da6ff; font-size: 12px;">[Wireless]</span>'}</div>
                             <div class="device-info">
                                 <div class="device-info-item">
                                     <span class="device-label">IP:</span>
@@ -749,8 +751,12 @@
                                     <span class="device-value">${device.manufacturer}</span>
                                 </div>
                                 <div class="device-info-item">
-                                    <span class="device-label">OS:</span>
+                                    <span class="device-label">Type:</span>
                                     <span class="device-value">${device.device_os}</span>
+                                </div>
+                                <div class="device-info-item">
+                                    <span class="device-label">Connection:</span>
+                                    <span class="device-value">${device.connection_type}</span>
                                 </div>
                                 <div class="device-info-item">
                                     <span class="device-label">Frequency:</span>
@@ -758,12 +764,10 @@
                                 </div>
                                 <div class="device-info-item">
                                     <span class="device-label">Signal:</span>
-                                    <span class="device-value">${device.signal_quality} (${device.signal_avg_dbm})</span>
+                                    <span class="device-value">${device.signal_quality} ${device.connection_type === 'Wireless' ? '(' + device.signal_avg_dbm + ')' : ''}</span>
                                 </div>
                             </div>
-                            <div class="signal-bar">
-                                <div class="signal-fill" style="width: ${device.signal_avg}%"></div>
-                            </div>
+                            ${device.connection_type === 'Wireless' ? `<div class="signal-bar"><div class="signal-fill" style="width: ${device.signal_avg}%"></div></div>` : '<div style="text-align: center; color: #51cf66; font-size: 12px; margin-top: 8px;">Wired Connection</div>'}
                         </div>
                     `).join("");
                 }

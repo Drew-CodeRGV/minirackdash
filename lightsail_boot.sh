@@ -71,11 +71,15 @@ After=network.target
 [Service]
 Type=simple
 User=www-data
+Group=www-data
 WorkingDirectory=/opt/eero/app
 Environment=PATH=/opt/eero/venv/bin
 ExecStart=/opt/eero/venv/bin/gunicorn --bind 0.0.0.0:5000 --workers 2 dashboard:app
+ExecReload=/bin/kill -s HUP $MAINPID
 Restart=always
 RestartSec=10
+KillMode=mixed
+TimeoutStopSec=5
 
 [Install]
 WantedBy=multi-user.target

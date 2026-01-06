@@ -245,7 +245,9 @@ def update_cache():
     global data_cache
     try:
         all_devices = eero_api.get_all_devices()
-        wireless_devices = [d for d in all_devices if d.get('connected') and d.get('wireless')]
+        # Include both wired and wireless connected devices
+        connected_devices = [d for d in all_devices if d.get('connected')]
+        wireless_devices = [d for d in connected_devices if d.get('wireless')]
         
         # Process devices for detailed view
         device_list = []
@@ -253,27 +255,38 @@ def update_cache():
         freq_counts = {'2.4GHz': 0, '5GHz': 0, '6GHz': 0}
         signal_values = []
         
-        for device in wireless_devices:
-            # OS Detection
+        # Process all connected devices for OS detection
+        for device in connected_devices:
+            # OS Detection (for all devices)
             device_os = detect_device_os(device)
             os_counts[device_os] += 1
             
-            # Frequency Detection
-            interface_info = device.get('interface', {})
-            freq_display, freq_band = parse_frequency(interface_info)
-            if freq_band in freq_counts:
-                freq_counts[freq_band] += 1
+            # Frequency and Signal only for wireless devices
+            is_wireless = device.get('wireless', False)
+            interface_info = device.get('interface', {}) if is_wireless else {}
             
-            # Signal Strength
-            signal_dbm = interface_info.get('signal_dbm', 'N/A')
-            signal_percent = convert_signal_dbm_to_percent(signal_dbm)
-            signal_quality = get_signal_quality(signal_dbm)
-            
-            if signal_dbm != 'N/A':
-                try:
-                    signal_values.append(float(str(signal_dbm).replace(' dBm', '').strip()))
-                except:
-                    pass
+            if is_wireless:
+                freq_display, freq_band = parse_frequency(interface_info)
+                if freq_band in freq_counts:
+                    freq_counts[freq_band] += 1
+                
+                # Signal Strength (wireless only)
+                signal_dbm = interface_info.get('signal_dbm', 'N/A')
+                signal_percent = convert_signal_dbm_to_percent(signal_dbm)
+                signal_quality = get_signal_quality(signal_dbm)
+                
+                if signal_dbm != 'N/A':
+                    try:
+                        signal_values.append(float(str(signal_dbm).replace(' dBm', '').strip()))
+                    except:
+                        pass
+            else:
+                # Wired device
+                freq_display = 'Wired'
+                freq_band = 'Wired'
+                signal_dbm = 'N/A'
+                signal_percent = 100  # Wired connections are always "full strength"
+                signal_quality = 'Wired'
             
             device_list.append({
                 'name': device.get('nickname') or device.get('hostname') or 'Unknown Device',
@@ -281,6 +294,7 @@ def update_cache():
                 'mac': device.get('mac', 'N/A'),
                 'manufacturer': device.get('manufacturer', 'Unknown'),
                 'device_os': device_os,
+                'connection_type': 'Wireless' if is_wireless else 'Wired',
                 'frequency': freq_display,
                 'frequency_band': freq_band,
                 'signal_avg_dbm': f"{signal_dbm} dBm" if signal_dbm != 'N/A' else 'N/A',
@@ -289,16 +303,18 @@ def update_cache():
             })
         
         # Update connected users history (keep last 168 points for 1 week of hourly data)
+        # Now counts all connected devices (wired + wireless)
         current_time = datetime.now()
         connected_users = data_cache.get('connected_users', [])
         connected_users.append({
             'timestamp': current_time.isoformat(),
-            'count': len(wireless_devices)
+            'count': len(connected_devices)
         })
         if len(connected_users) > 168:  # Keep 1 week of hourly data
             connected_users = connected_users[-168:]
         
         # Update signal strength history (keep last 168 points for 1 week of hourly data)
+        # Signal strength only applies to wireless devices
         signal_strength_avg = data_cache.get('signal_strength_avg', [])
         if signal_values:
             avg_signal = sum(signal_values) / len(signal_values)
@@ -316,10 +332,13 @@ def update_cache():
             'frequency_distribution': freq_counts,
             'signal_strength_avg': signal_strength_avg,
             'devices': device_list,
+            'total_devices': len(connected_devices),
+            'wireless_devices': len(wireless_devices),
+            'wired_devices': len(connected_devices) - len(wireless_devices),
             'last_update': current_time.isoformat()
         })
         
-        logging.info(f"Cache updated: {len(wireless_devices)} wireless devices")
+        logging.info(f"Cache updated: {len(connected_devices)} total devices ({len(wireless_devices)} wireless, {len(connected_devices) - len(wireless_devices)} wired)")
         
     except Exception as e:
         logging.error(f"Cache update error: {e}")
@@ -455,29 +474,49 @@ def update_dashboard():
         os.chown('/opt/eero/app', 33, 33)
         os.chmod('/opt/eero/app', 0o755)
         
-        # Restart service using absolute path
+        # Restart service using absolute path with proper sudo handling
         logging.info("Restarting eero-dashboard service...")
-        restart_result = subprocess.run([
-            '/usr/bin/systemctl', 'restart', 'eero-dashboard'
-        ], capture_output=True, text=True, timeout=30, env={'PATH': '/usr/bin:/bin'})
         
-        if restart_result.returncode != 0:
-            # Try alternative systemctl path
-            restart_result = subprocess.run([
-                '/bin/systemctl', 'restart', 'eero-dashboard'
-            ], capture_output=True, text=True, timeout=30, env={'PATH': '/usr/bin:/bin'})
-            
-            if restart_result.returncode != 0:
-                logging.error(f"Service restart failed: {restart_result.stderr}")
-                return jsonify({
-                    'success': False, 
-                    'message': f'Service restart failed: {restart_result.stderr}'
-                }), 500
+        # Try different approaches for restarting the service
+        restart_commands = [
+            ['/usr/bin/sudo', '/usr/bin/systemctl', 'restart', 'eero-dashboard'],
+            ['/bin/sudo', '/bin/systemctl', 'restart', 'eero-dashboard'],
+            ['/usr/bin/systemctl', 'restart', 'eero-dashboard'],
+            ['/bin/systemctl', 'restart', 'eero-dashboard']
+        ]
+        
+        restart_success = False
+        for cmd in restart_commands:
+            try:
+                restart_result = subprocess.run(
+                    cmd, 
+                    capture_output=True, 
+                    text=True, 
+                    timeout=30,
+                    env={'PATH': '/usr/bin:/bin:/usr/sbin:/sbin'}
+                )
+                
+                if restart_result.returncode == 0:
+                    restart_success = True
+                    logging.info(f"Service restarted successfully using: {' '.join(cmd)}")
+                    break
+                else:
+                    logging.warning(f"Command {' '.join(cmd)} failed: {restart_result.stderr}")
+            except Exception as e:
+                logging.warning(f"Command {' '.join(cmd)} exception: {str(e)}")
+                continue
+        
+        if not restart_success:
+            logging.error("All restart attempts failed")
+            return jsonify({
+                'success': False, 
+                'message': 'Files updated but service restart failed. Please restart manually with: sudo systemctl restart eero-dashboard'
+            }), 500
         
         logging.info("Dashboard update completed successfully")
         return jsonify({
             'success': True, 
-            'message': 'Dashboard updated successfully! Reloading in 3 seconds...'
+            'message': 'Dashboard code updated successfully! Reloading in 3 seconds...'
         })
         
     except requests.RequestException as e:
