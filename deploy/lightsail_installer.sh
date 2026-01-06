@@ -3,6 +3,8 @@
 # This script is called by the boot script
 
 set -e
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
 
 echo "📦 Setting up MiniRack Dashboard from GitHub..."
 

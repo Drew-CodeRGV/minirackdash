@@ -3,6 +3,8 @@
 # Handles Ubuntu 24.04 externally-managed-environment properly
 
 set -e
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
 
 echo "🚀 MiniRack Dashboard - Manual Installation (Virtual Environment)"
 echo "================================================================"

@@ -17,7 +17,10 @@ apt-get install -y python3-flask python3-requests python3-pip
 pip3 install --break-system-packages flask-cors speedtest-cli gunicorn
 
 # Clone repository
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
 cd /tmp
+rm -rf minirackdash
 git clone -b eeroNetworkDash https://github.com/Drew-CodeRGV/minirackdash.git
 cd minirackdash
 

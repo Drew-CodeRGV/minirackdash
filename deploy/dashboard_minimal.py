@@ -417,20 +417,49 @@ def get_version():
 
 @app.route('/api/admin/update', methods=['POST'])
 def update_dashboard():
+    """Update dashboard from GitHub with proper encoding handling"""
     try:
-        result = subprocess.run(['/opt/eero/update.sh'], 
-                              capture_output=True, text=True, timeout=60)
+        import shutil
         
-        if result.returncode == 0:
-            return jsonify({
-                'success': True, 
-                'message': 'Dashboard updated successfully! Reloading...'
-            })
-        else:
+        # Clean up any existing temp files
+        subprocess.run(['rm', '-rf', '/tmp/minirackdash'], capture_output=True)
+        
+        # Clone fresh copy
+        clone_result = subprocess.run([
+            'git', 'clone', '-b', 'eeroNetworkDash', 
+            'https://github.com/Drew-CodeRGV/minirackdash.git', 
+            '/tmp/minirackdash'
+        ], capture_output=True, text=True, timeout=30)
+        
+        if clone_result.returncode != 0:
             return jsonify({
                 'success': False, 
-                'message': f'Update failed: {result.stderr}'
+                'message': f'Git clone failed: {clone_result.stderr}'
             }), 500
+        
+        # Copy files with proper handling
+        shutil.copy2('/tmp/minirackdash/deploy/dashboard_minimal.py', '/opt/eero/app/dashboard.py')
+        shutil.copy2('/tmp/minirackdash/deploy/index.html', '/opt/eero/app/index.html')
+        
+        # Set permissions
+        subprocess.run(['chown', '-R', 'www-data:www-data', '/opt/eero'], check=True)
+        
+        # Restart service
+        restart_result = subprocess.run([
+            'systemctl', 'restart', 'eero-dashboard'
+        ], capture_output=True, text=True, timeout=30)
+        
+        if restart_result.returncode != 0:
+            return jsonify({
+                'success': False, 
+                'message': f'Service restart failed: {restart_result.stderr}'
+            }), 500
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Dashboard updated successfully! Reloading...'
+        })
+        
     except Exception as e:
         return jsonify({
             'success': False, 
