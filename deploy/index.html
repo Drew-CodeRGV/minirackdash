@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Network Dashboard v6.0.0 (Production)</title>
+    <title>Network Dashboard v6.1.0 (Production)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -415,7 +415,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.0.0</span> • 
+                <span class="version">v6.1.0</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -633,6 +633,18 @@
                     document.getElementById("setupNotice").style.display = "block";
                 }
                 
+                // Check for stale data (no successful update in last 5 minutes)
+                const lastSuccessful = data.last_successful_update ? new Date(data.last_successful_update) : null;
+                const now = new Date();
+                const isStale = lastSuccessful && (now - lastSuccessful) > 5 * 60 * 1000;
+                
+                if (isStale) {
+                    document.getElementById("lastUpdate").textContent = "⚠️ Data may be stale";
+                    document.getElementById("lastUpdate").style.color = "#ff922b";
+                } else {
+                    document.getElementById("lastUpdate").style.color = "#fff";
+                }
+                
                 // Apply client-side time filtering
                 const filteredData = filterDataByTimeRange(data, currentTimeRange);
                 
@@ -683,8 +695,24 @@
                 charts.signalStrength.update();
                 
                 // Update last update time
-                document.getElementById("lastUpdate").textContent = 
-                    `Updated: ${new Date(data.last_update).toLocaleTimeString()}`;
+                const lastUpdate = new Date(data.last_update);
+                const lastSuccessful = data.last_successful_update ? new Date(data.last_successful_update) : lastUpdate;
+                const timeDiff = Math.floor((now - lastUpdate) / 1000);
+                
+                let updateText;
+                if (timeDiff < 60) {
+                    updateText = `Updated: ${timeDiff}s ago`;
+                } else if (timeDiff < 3600) {
+                    updateText = `Updated: ${Math.floor(timeDiff / 60)}m ago`;
+                } else {
+                    updateText = `Updated: ${lastUpdate.toLocaleTimeString()}`;
+                }
+                
+                if (isStale) {
+                    updateText = "⚠️ Data may be stale";
+                }
+                
+                document.getElementById("lastUpdate").textContent = updateText;
                     
             } catch (error) {
                 console.error("Dashboard update error:", error);

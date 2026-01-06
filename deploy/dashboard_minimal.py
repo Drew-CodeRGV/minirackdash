@@ -16,7 +16,7 @@ from flask_cors import CORS
 import logging
 
 # Configuration
-VERSION = "6.0.0-production"
+VERSION = "6.1.0-production"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
@@ -108,21 +108,41 @@ class EeroAPI:
             return {}
     
     def get_all_devices(self):
-        """Get all devices"""
-        try:
-            url = f"{self.api_base}/networks/{self.network_id}/devices"
-            response = self.session.get(url, headers=self.get_headers(), timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            if 'data' in data:
-                devices = data['data'] if isinstance(data['data'], list) else data['data'].get('devices', [])
-                logging.info(f"Retrieved {len(devices)} devices")
-                return devices
-            return []
-        except Exception as e:
-            logging.error(f"Device fetch error: {e}")
-            return []
+        """Get all devices with retry logic"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                url = f"{self.api_base}/networks/{self.network_id}/devices"
+                response = self.session.get(url, headers=self.get_headers(), timeout=15)
+                response.raise_for_status()
+                data = response.json()
+                
+                if 'data' in data:
+                    devices = data['data'] if isinstance(data['data'], list) else data['data'].get('devices', [])
+                    logging.info(f"Retrieved {len(devices)} devices (attempt {attempt + 1})")
+                    return devices
+                
+                logging.warning(f"No data in response (attempt {attempt + 1}): {data}")
+                return []
+                
+            except requests.exceptions.Timeout:
+                logging.warning(f"API timeout on attempt {attempt + 1}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+            except requests.exceptions.RequestException as e:
+                logging.warning(f"API request error on attempt {attempt + 1}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+            except Exception as e:
+                logging.error(f"Device fetch error on attempt {attempt + 1}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+        
+        logging.error("All device fetch attempts failed")
+        return []
 
 # Initialize API
 eero_api = EeroAPI()
@@ -244,10 +264,26 @@ def update_cache():
     """Update data cache with latest device information"""
     global data_cache
     try:
+        logging.info("Starting cache update...")
         all_devices = eero_api.get_all_devices()
+        
+        # Validate we got actual device data
+        if not all_devices:
+            logging.warning("No devices returned from API - keeping previous cache")
+            return
+        
         # Include both wired and wireless connected devices
         connected_devices = [d for d in all_devices if d.get('connected')]
+        
+        # If we get 0 connected devices but had devices before, it might be a temporary API issue
+        previous_device_count = len(data_cache.get('devices', []))
+        if len(connected_devices) == 0 and previous_device_count > 0:
+            logging.warning(f"API returned 0 devices but we had {previous_device_count} before - keeping previous cache")
+            return
+        
         wireless_devices = [d for d in connected_devices if d.get('wireless')]
+        
+        logging.info(f"Processing {len(connected_devices)} connected devices ({len(wireless_devices)} wireless)")
         
         # Process devices for detailed view
         device_list = []
@@ -335,13 +371,17 @@ def update_cache():
             'total_devices': len(connected_devices),
             'wireless_devices': len(wireless_devices),
             'wired_devices': len(connected_devices) - len(wireless_devices),
-            'last_update': current_time.isoformat()
+            'last_update': current_time.isoformat(),
+            'last_successful_update': current_time.isoformat()
         })
         
-        logging.info(f"Cache updated: {len(connected_devices)} total devices ({len(wireless_devices)} wireless, {len(connected_devices) - len(wireless_devices)} wired)")
+        logging.info(f"Cache updated successfully: {len(connected_devices)} total devices ({len(wireless_devices)} wireless, {len(connected_devices) - len(wireless_devices)} wired)")
         
     except Exception as e:
         logging.error(f"Cache update error: {e}")
+        # Update last_update timestamp even on error, but keep last_successful_update unchanged
+        if 'last_update' in data_cache:
+            data_cache['last_update'] = datetime.now().isoformat()
 
 def filter_data_by_timerange(data, hours):
     """Filter time-series data by hours"""
