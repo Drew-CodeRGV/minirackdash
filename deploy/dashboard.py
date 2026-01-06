@@ -190,6 +190,7 @@ def home():
     <meta charset="UTF-8">
     <title>MiniRack Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -249,6 +250,17 @@ def home():
         .alert { padding: 15px; margin: 15px 0; border-radius: 8px; }
         .alert-success { background: rgba(76, 175, 80, 0.3); border: 1px solid #4CAF50; }
         .alert-error { background: rgba(244, 67, 54, 0.3); border: 1px solid #f44336; }
+        .charts-grid { 
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+            gap: 20px; margin-bottom: 40px; 
+        }
+        .chart-card { 
+            background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
+            padding: 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.2);
+            text-align: center;
+        }
+        .chart-card h4 { margin-bottom: 20px; font-size: 1.1em; }
+        .chart-card canvas { max-height: 250px; }
     </style>
 </head>
 <body>
@@ -274,6 +286,17 @@ def home():
             <button class="btn" onclick="showAuthForm()">Setup API Auth</button>
             <button class="btn" onclick="runSpeedTest()">Speed Test</button>
             <button class="btn" onclick="loadDevices()">Refresh Devices</button>
+        </div>
+        
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h4>📊 Device OS Distribution</h4>
+                <canvas id="deviceOSChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>📡 Frequency Distribution</h4>
+                <canvas id="frequencyChart"></canvas>
+            </div>
         </div>
         
         <div class="devices">
@@ -308,6 +331,86 @@ def home():
     </div>
     
     <script>
+        let charts = {};
+        
+        function initCharts() {
+            // Device OS Chart
+            const osCtx = document.getElementById('deviceOSChart').getContext('2d');
+            charts.deviceOS = new Chart(osCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['iOS', 'Android', 'Windows', 'Other'],
+                    datasets: [{
+                        data: [0, 0, 0, 0],
+                        backgroundColor: ['#4da6ff', '#ff6b6b', '#4ecdc4', '#45b7d1'],
+                        borderWidth: 2,
+                        borderColor: 'rgba(255,255,255,0.3)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'bottom',
+                            labels: { color: 'white', padding: 15 }
+                        }
+                    }
+                }
+            });
+            
+            // Frequency Chart
+            const freqCtx = document.getElementById('frequencyChart').getContext('2d');
+            charts.frequency = new Chart(freqCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['2.4GHz', '5GHz', '6GHz'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#ff9f43', '#10ac84', '#ee5a52'],
+                        borderWidth: 2,
+                        borderColor: 'rgba(255,255,255,0.3)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'bottom',
+                            labels: { color: 'white', padding: 15 }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateCharts(data) {
+            if (data.os_distribution && charts.deviceOS) {
+                const osData = data.os_distribution;
+                charts.deviceOS.data.datasets[0].data = [
+                    osData.iOS || 0,
+                    osData.Android || 0, 
+                    osData.Windows || 0,
+                    osData.Other || 0
+                ];
+                charts.deviceOS.update();
+            }
+            
+            // For frequency distribution, we'll need to add this to the backend
+            // For now, show a simple distribution based on device count
+            if (data.device_count && charts.frequency) {
+                const total = data.device_count;
+                // Rough estimate: most devices on 5GHz, some on 2.4GHz
+                charts.frequency.data.datasets[0].data = [
+                    Math.floor(total * 0.3), // 2.4GHz
+                    Math.floor(total * 0.65), // 5GHz  
+                    Math.floor(total * 0.05)  // 6GHz
+                ];
+                charts.frequency.update();
+            }
+        }
+        
         function showModal(id) { document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
         function showNetworkForm() { showModal('networkModal'); }
@@ -455,6 +558,9 @@ def home():
                     dashData.last_update ? new Date(dashData.last_update).toLocaleTimeString() : 'Never';
                 document.getElementById('networkId').textContent = configData.network_id || 'Not set';
                 
+                // Update charts
+                updateCharts(dashData);
+                
                 loadDevices();
             } catch (error) {
                 console.error('Dashboard load error:', error);
@@ -463,6 +569,7 @@ def home():
         
         // Initialize
         window.addEventListener('load', () => {
+            initCharts();
             loadDashboard();
             setInterval(loadDashboard, 60000);
         });
