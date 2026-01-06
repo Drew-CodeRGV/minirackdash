@@ -557,10 +557,10 @@
             charts.deviceOS = new Chart(document.getElementById("deviceOSChart").getContext("2d"), {
                 type: "doughnut",
                 data: {
-                    labels: ["iOS", "Android", "Windows", "Amazon", "Other"],
+                    labels: ["iOS", "Android", "Windows", "Amazon", "Gaming", "Streaming", "Other"],
                     datasets: [{
-                        data: [0, 0, 0, 0, 0],
-                        backgroundColor: ["#4da6ff", "#51cf66", "#74c0fc", "#ff922b", "#ffd43b"]
+                        data: [0, 0, 0, 0, 0, 0, 0],
+                        backgroundColor: ["#4da6ff", "#51cf66", "#74c0fc", "#ff922b", "#e599f7", "#ffd43b", "#868e96"]
                     }]
                 },
                 options: commonOptions
@@ -621,7 +621,8 @@
         
         async function updateDashboardData() {
             try {
-                const response = await fetch(`/api/dashboard/${currentTimeRange}`);
+                // Always fetch fresh data and apply filtering client-side for better reliability
+                const response = await fetch('/api/dashboard');
                 const data = await response.json();
                 
                 // Check if we have data (indicates configuration is working)
@@ -632,20 +633,25 @@
                     document.getElementById("setupNotice").style.display = "block";
                 }
                 
+                // Apply client-side time filtering
+                const filteredData = filterDataByTimeRange(data, currentTimeRange);
+                
                 // Update Connected Users Chart
-                charts.users.data.labels = data.connected_users.map(entry => 
+                charts.users.data.labels = filteredData.connected_users.map(entry => 
                     new Date(entry.timestamp).toLocaleTimeString()
                 );
-                charts.users.data.datasets[0].data = data.connected_users.map(entry => Math.round(entry.count));
+                charts.users.data.datasets[0].data = filteredData.connected_users.map(entry => Math.round(entry.count));
                 charts.users.update();
                 
-                // Update Device OS Chart
+                // Update Device OS Chart (use current data, not time-filtered)
                 const deviceOS = data.device_os || {};
                 const deviceCounts = [
                     Math.round(deviceOS.iOS || 0),
                     Math.round(deviceOS.Android || 0),
                     Math.round(deviceOS.Windows || 0),
                     Math.round(deviceOS.Amazon || 0),
+                    Math.round(deviceOS.Gaming || 0),
+                    Math.round(deviceOS.Streaming || 0),
                     Math.round(deviceOS.Other || 0)
                 ];
                 charts.deviceOS.data.datasets[0].data = deviceCounts;
@@ -654,7 +660,7 @@
                 const totalDevices = deviceCounts.reduce((a, b) => a + b, 0);
                 document.getElementById("deviceOsSubtitle").textContent = `${totalDevices} devices`;
                 
-                // Update Frequency Chart
+                // Update Frequency Chart (use current data, not time-filtered)
                 const freqDist = data.frequency_distribution || {};
                 const freqCounts = [
                     Math.round(freqDist["2.4GHz"] || 0),
@@ -668,10 +674,10 @@
                 document.getElementById("frequencySubtitle").textContent = `${totalFreqDevices} devices`;
                 
                 // Update Signal Strength Chart
-                charts.signalStrength.data.labels = data.signal_strength_avg.map(entry => 
+                charts.signalStrength.data.labels = filteredData.signal_strength_avg.map(entry => 
                     new Date(entry.timestamp).toLocaleTimeString()
                 );
-                charts.signalStrength.data.datasets[0].data = data.signal_strength_avg.map(entry => entry.avg_dbm);
+                charts.signalStrength.data.datasets[0].data = filteredData.signal_strength_avg.map(entry => entry.avg_dbm);
                 charts.signalStrength.update();
                 
                 // Update last update time
@@ -682,6 +688,24 @@
                 console.error("Dashboard update error:", error);
                 document.getElementById("lastUpdate").textContent = "Update failed";
             }
+        }
+        
+        function filterDataByTimeRange(data, hours) {
+            if (!hours || hours === 0) {
+                return data;
+            }
+            
+            const cutoffTime = new Date(Date.now() - (hours * 60 * 60 * 1000));
+            
+            return {
+                ...data,
+                connected_users: data.connected_users.filter(entry => 
+                    new Date(entry.timestamp) >= cutoffTime
+                ),
+                signal_strength_avg: data.signal_strength_avg.filter(entry => 
+                    new Date(entry.timestamp) >= cutoffTime
+                )
+            };
         }
         
         function openModal(modalId) {

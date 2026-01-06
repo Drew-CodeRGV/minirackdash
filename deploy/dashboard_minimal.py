@@ -143,14 +143,42 @@ def detect_device_os(device):
     hostname = str(device.get('hostname', '')).lower()
     text = f"{manufacturer} {hostname}"
     
-    if any(k in text for k in ['amazon', 'echo', 'alexa', 'fire tv', 'kindle']):
+    # Amazon detection (prioritize manufacturer field)
+    if any(k in manufacturer for k in ['amazon', 'amazon technologies']):
         return 'Amazon'
-    elif any(k in text for k in ['apple', 'iphone', 'ipad', 'mac', 'ios']):
+    elif any(k in text for k in ['echo', 'alexa', 'fire tv', 'kindle']):
+        return 'Amazon'
+    
+    # Apple/iOS detection
+    elif any(k in manufacturer for k in ['apple', 'apple inc']):
         return 'iOS'
-    elif any(k in text for k in ['android', 'samsung', 'google', 'pixel', 'lg', 'htc']):
+    elif any(k in text for k in ['iphone', 'ipad', 'mac', 'ios', 'apple']):
+        return 'iOS'
+    
+    # Android detection (includes many manufacturers)
+    elif any(k in manufacturer for k in ['samsung', 'google', 'lg electronics', 'htc', 'sony', 'motorola', 'huawei', 'xiaomi', 'oneplus']):
         return 'Android'
-    elif any(k in text for k in ['windows', 'microsoft', 'dell', 'hp', 'lenovo', 'asus']):
+    elif any(k in text for k in ['android', 'pixel', 'galaxy']):
+        return 'Android'
+    
+    # Windows detection
+    elif any(k in manufacturer for k in ['microsoft', 'dell', 'hp', 'lenovo', 'asus', 'acer', 'msi']):
         return 'Windows'
+    elif any(k in text for k in ['windows', 'microsoft', 'surface']):
+        return 'Windows'
+    
+    # Gaming consoles and other specific devices
+    elif any(k in manufacturer for k in ['sony computer entertainment', 'nintendo']):
+        return 'Gaming'
+    elif any(k in text for k in ['playstation', 'xbox', 'nintendo', 'steam deck']):
+        return 'Gaming'
+    
+    # Smart TV and streaming devices
+    elif any(k in manufacturer for k in ['roku', 'nvidia', 'chromecast']):
+        return 'Streaming'
+    elif any(k in text for k in ['roku', 'chromecast', 'nvidia shield', 'apple tv']):
+        return 'Streaming'
+    
     else:
         return 'Other'
 
@@ -221,7 +249,7 @@ def update_cache():
         
         # Process devices for detailed view
         device_list = []
-        os_counts = {'iOS': 0, 'Android': 0, 'Windows': 0, 'Amazon': 0, 'Other': 0}
+        os_counts = {'iOS': 0, 'Android': 0, 'Windows': 0, 'Amazon': 0, 'Gaming': 0, 'Streaming': 0, 'Other': 0}
         freq_counts = {'2.4GHz': 0, '5GHz': 0, '6GHz': 0}
         signal_values = []
         
@@ -383,50 +411,89 @@ def get_version():
 
 @app.route('/api/admin/update', methods=['POST'])
 def update_dashboard():
-    """Update dashboard from GitHub with proper encoding handling"""
+    """Update dashboard from GitHub - completely self-contained"""
     try:
-        import shutil
+        logging.info("Starting dashboard update from GitHub...")
         
-        # Clean up any existing temp files
-        subprocess.run(['rm', '-rf', '/tmp/minirackdash'], capture_output=True)
+        # Download files directly using requests - no external dependencies
+        files_to_update = [
+            {
+                'url': 'https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py',
+                'path': '/opt/eero/app/dashboard.py'
+            },
+            {
+                'url': 'https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html', 
+                'path': '/opt/eero/app/index.html'
+            }
+        ]
         
-        # Clone fresh copy
-        clone_result = subprocess.run([
-            'git', 'clone', '-b', 'eeroNetworkDash', 
-            'https://github.com/Drew-CodeRGV/minirackdash.git', 
-            '/tmp/minirackdash'
-        ], capture_output=True, text=True, timeout=30)
+        # Download and save each file
+        for file_info in files_to_update:
+            logging.info(f"Downloading {file_info['url']}")
+            
+            response = requests.get(file_info['url'], timeout=30)
+            response.raise_for_status()
+            
+            # Create backup
+            backup_path = f"{file_info['path']}.backup"
+            if os.path.exists(file_info['path']):
+                with open(file_info['path'], 'r', encoding='utf-8') as src:
+                    with open(backup_path, 'w', encoding='utf-8') as dst:
+                        dst.write(src.read())
+            
+            # Write new file
+            with open(file_info['path'], 'w', encoding='utf-8') as f:
+                f.write(response.text)
+            
+            # Set file permissions (owner: www-data, group: www-data, mode: 644)
+            os.chown(file_info['path'], 33, 33)  # www-data uid/gid
+            os.chmod(file_info['path'], 0o644)
+            
+            logging.info(f"Updated {file_info['path']}")
         
-        if clone_result.returncode != 0:
-            return jsonify({
-                'success': False, 
-                'message': f'Git clone failed: {clone_result.stderr}'
-            }), 500
+        # Set directory permissions
+        os.chown('/opt/eero/app', 33, 33)
+        os.chmod('/opt/eero/app', 0o755)
         
-        # Copy files with proper handling
-        shutil.copy2('/tmp/minirackdash/deploy/dashboard_minimal.py', '/opt/eero/app/dashboard.py')
-        shutil.copy2('/tmp/minirackdash/deploy/index.html', '/opt/eero/app/index.html')
-        
-        # Set permissions
-        subprocess.run(['chown', '-R', 'www-data:www-data', '/opt/eero'], check=True)
-        
-        # Restart service
+        # Restart service using absolute path
+        logging.info("Restarting eero-dashboard service...")
         restart_result = subprocess.run([
-            'systemctl', 'restart', 'eero-dashboard'
-        ], capture_output=True, text=True, timeout=30)
+            '/usr/bin/systemctl', 'restart', 'eero-dashboard'
+        ], capture_output=True, text=True, timeout=30, env={'PATH': '/usr/bin:/bin'})
         
         if restart_result.returncode != 0:
-            return jsonify({
-                'success': False, 
-                'message': f'Service restart failed: {restart_result.stderr}'
-            }), 500
+            # Try alternative systemctl path
+            restart_result = subprocess.run([
+                '/bin/systemctl', 'restart', 'eero-dashboard'
+            ], capture_output=True, text=True, timeout=30, env={'PATH': '/usr/bin:/bin'})
+            
+            if restart_result.returncode != 0:
+                logging.error(f"Service restart failed: {restart_result.stderr}")
+                return jsonify({
+                    'success': False, 
+                    'message': f'Service restart failed: {restart_result.stderr}'
+                }), 500
         
+        logging.info("Dashboard update completed successfully")
         return jsonify({
             'success': True, 
-            'message': 'Dashboard updated successfully! Reloading...'
+            'message': 'Dashboard updated successfully! Reloading in 3 seconds...'
         })
         
+    except requests.RequestException as e:
+        logging.error(f"Download error: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'message': f'Download failed: {str(e)}'
+        }), 500
+    except OSError as e:
+        logging.error(f"File operation error: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'message': f'File operation failed: {str(e)}'
+        }), 500
     except Exception as e:
+        logging.error(f"Update error: {str(e)}")
         return jsonify({
             'success': False, 
             'message': f'Update error: {str(e)}'

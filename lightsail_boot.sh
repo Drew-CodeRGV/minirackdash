@@ -119,9 +119,27 @@ log "🔄 Creating update script..."
 cat > /opt/eero/update.sh << 'EOF'
 #!/bin/bash
 echo "🔄 Updating MiniRack Dashboard from GitHub..."
-curl -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
-curl -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
-systemctl restart eero-dashboard
+
+# Use absolute paths and proper error handling
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Clean up temp directory
+if [ -d "/tmp/minirackdash" ]; then
+    /bin/rm -rf /tmp/minirackdash
+fi
+
+# Download files directly instead of git clone
+echo "📥 Downloading updated files..."
+/usr/bin/curl -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
+/usr/bin/curl -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
+
+# Set permissions
+/bin/chown -R www-data:www-data /opt/eero
+
+# Restart service
+echo "🔄 Restarting service..."
+/bin/systemctl restart eero-dashboard
+
 echo "✅ Update complete!"
 EOF
 chmod +x /opt/eero/update.sh
