@@ -19,7 +19,7 @@ DATA_CACHE_FILE = LOCAL_DIR / "data_cache.json"
 # Ensure local directory exists
 LOCAL_DIR.mkdir(exist_ok=True)
 
-# Setup logging for local development
+# Setup logging for local development BEFORE importing the main module
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -29,18 +29,30 @@ logging.basicConfig(
     ]
 )
 
-# Override configuration paths for local development
-import deploy.dashboard_minimal as dashboard_module
+# Override the production logging configuration by patching the logging module
+# This prevents the main dashboard from trying to create /opt/eero/logs/dashboard.log
+original_basicConfig = logging.basicConfig
+def patched_basicConfig(*args, **kwargs):
+    # Ignore any basicConfig calls from the main dashboard module
+    pass
+logging.basicConfig = patched_basicConfig
 
-# Patch the configuration file paths
-dashboard_module.VERSION = VERSION
-dashboard_module.CONFIG_FILE = str(CONFIG_FILE)
-dashboard_module.TOKEN_FILE = str(LOCAL_DIR / ".eero_token")
-dashboard_module.TEMPLATE_FILE = str(TEMPLATE_FILE)
-dashboard_module.DATA_CACHE_FILE = str(DATA_CACHE_FILE)
+# Now import and patch the dashboard module
+sys.path.insert(0, str(Path(__file__).parent / "deploy"))
+import dashboard_minimal
 
-# Import the Flask app and all functions
-from deploy.dashboard_minimal import app, update_cache
+# Restore original basicConfig after import
+logging.basicConfig = original_basicConfig
+
+# Patch the configuration file paths for local development
+dashboard_minimal.VERSION = VERSION
+dashboard_minimal.CONFIG_FILE = str(CONFIG_FILE)
+dashboard_minimal.TOKEN_FILE = str(LOCAL_DIR / ".eero_token")
+dashboard_minimal.TEMPLATE_FILE = str(TEMPLATE_FILE)
+dashboard_minimal.DATA_CACHE_FILE = str(DATA_CACHE_FILE)
+
+# Import the Flask app and functions
+from dashboard_minimal import app, update_cache
 
 def create_default_config():
     """Create default configuration if it doesn't exist"""
