@@ -3,17 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=3.0">
-    <title>Network Dashboard v6.7.6 (Mobile)</title>
+    <title>Network Dashboard v6.7.7 (Mobile)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box;
+        }
+        
+        /* Prevent all animations and transitions globally */
+        *, *::before, *::after {
+            animation-duration: 0s !important;
+            animation-delay: 0s !important;
+            transition-duration: 0s !important;
+            transition-delay: 0s !important;
+        }
+        
         body { 
             background: linear-gradient(135deg, #001a33 0%, #003366 100%); 
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; 
             color: #fff; 
             overflow-x: hidden;
             min-height: 100vh;
+            position: relative;
         }
         
         /* Mobile-first header design */
@@ -155,16 +169,19 @@
             transform: scale(1.1) rotate(180deg); 
         }
         
-        /* Responsive dashboard grid */
+        /* Responsive dashboard grid - Fixed layout to prevent shifts */
         .dashboard-container { 
             display: grid; 
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 10px; 
             padding: 10px;
             min-height: calc(100vh - 80px);
+            position: relative;
+            width: 100%;
+            max-width: 100vw;
         }
         
-        /* Mobile-optimized chart cards */
+        /* Mobile-optimized chart cards - Fixed dimensions to prevent layout shifts */
         .chart-card { 
             background: rgba(0,40,80,.7); 
             border-radius: 10px; 
@@ -173,8 +190,8 @@
             border: 1px solid rgba(255,255,255,.1); 
             display: flex; 
             flex-direction: column;
-            min-height: 280px;
-            max-height: 400px;
+            height: 300px; /* Fixed height to prevent shifts */
+            width: 100%;
             align-items: stretch;
             position: relative;
             overflow: hidden;
@@ -188,6 +205,8 @@
             color: #4da6ff; 
             text-transform: uppercase; 
             flex-shrink: 0;
+            height: 20px; /* Fixed height */
+            line-height: 20px;
         }
         
         .chart-subtitle { 
@@ -197,12 +216,16 @@
             margin-bottom: 8px;
             line-height: 1.3;
             flex-shrink: 0;
+            height: 30px; /* Fixed height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .chart-container { 
             flex: 1; 
             position: relative; 
-            min-height: 200px; 
+            height: 220px; /* Fixed height */
             display: flex; 
             align-items: center; 
             justify-content: center;
@@ -217,22 +240,26 @@
             position: static !important;
         }
         
-        /* Disable all animations and transitions on charts */
+        /* Completely disable all animations and transitions */
         .chart-container *, 
         .chart-container canvas,
-        .chart-card * {
+        .chart-card *,
+        .dashboard-container *,
+        body * {
             animation: none !important;
             transition: none !important;
             transform: none !important;
         }
         
-        /* Network statistics display */
+        /* Network statistics display - Fixed positioning to prevent shifts */
         .network-stats {
             background: rgba(0,40,80,.5);
             border-radius: 10px;
             padding: 15px;
-            margin: 15px 0;
+            margin: 15px;
             border: 1px solid rgba(77,166,255,.2);
+            position: relative;
+            width: calc(100% - 30px);
         }
         
         .network-stats-title {
@@ -241,6 +268,8 @@
             color: #4da6ff;
             margin-bottom: 12px;
             text-align: center;
+            height: 20px;
+            line-height: 20px;
         }
         
         .network-item {
@@ -249,6 +278,7 @@
             padding: 12px;
             margin-bottom: 10px;
             border: 1px solid rgba(77,166,255,.1);
+            position: relative;
         }
         
         .network-item:last-child {
@@ -262,6 +292,7 @@
             margin-bottom: 8px;
             flex-wrap: wrap;
             gap: 5px;
+            height: 24px;
         }
         
         .network-name {
@@ -286,6 +317,8 @@
             display: flex;
             justify-content: space-between;
             padding: 2px 0;
+            height: 16px;
+            align-items: center;
         }
         
         .network-stat-label {
@@ -308,6 +341,8 @@
             justify-content: space-between;
             padding: 1px 0;
             font-size: clamp(9px, 2vw, 10px);
+            height: 14px;
+            align-items: center;
         }
         
         .frequency-label {
@@ -647,13 +682,12 @@
             }
             
             .chart-card {
-                min-height: 320px;
-                max-height: 450px;
+                height: 350px; /* Fixed height for tablet */
                 padding: 15px;
             }
             
             .chart-container {
-                min-height: 220px;
+                height: 260px; /* Fixed height for tablet */
             }
             
             .header {
@@ -690,13 +724,12 @@
             }
             
             .chart-card {
-                min-height: auto;
-                max-height: none;
+                height: calc((100vh - 140px) / 1); /* Fixed height for desktop */
                 padding: 20px;
             }
             
             .chart-container {
-                min-height: auto;
+                height: calc(100% - 70px); /* Fixed height for desktop */
             }
             
             .modal.active {
@@ -974,7 +1007,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.7.6-mobile</span> • 
+                <span class="version">v6.7.7-mobile</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -1352,21 +1385,48 @@
             if (!chart || !chart.data) return;
             
             try {
-                // Update data without triggering animations
-                if (newLabels) {
+                // Prevent any layout changes during update
+                const container = chart.canvas.parentElement;
+                if (container) {
+                    container.style.height = container.offsetHeight + 'px';
+                }
+                
+                // Update data without triggering layout changes
+                if (newLabels && Array.isArray(newLabels)) {
                     chart.data.labels = newLabels;
                 }
                 
-                if (Array.isArray(newData)) {
+                if (Array.isArray(newData) && chart.data.datasets[0]) {
                     chart.data.datasets[0].data = newData;
                 } else if (newData && chart.data.datasets[0]) {
                     chart.data.datasets[0].data = newData;
                 }
                 
-                // Update without any animation
+                // Update without any animation or layout changes
                 chart.update('none');
+                
+                // Restore container height
+                if (container) {
+                    container.style.height = '';
+                }
             } catch (error) {
                 console.error("Chart update error:", error);
+            }
+        }
+        
+        function updateTextContent(elementId, text) {
+            try {
+                const element = document.getElementById(elementId);
+                if (element && element.textContent !== text) {
+                    // Prevent layout shift by maintaining element dimensions
+                    const originalHeight = element.offsetHeight;
+                    element.textContent = text;
+                    if (element.offsetHeight !== originalHeight) {
+                        element.style.height = originalHeight + 'px';
+                    }
+                }
+            } catch (error) {
+                console.error("Text update error:", error);
             }
         }
         
@@ -1455,7 +1515,7 @@
                         const wirelessCount = data.wireless_devices || 0;
                         const wiredCount = data.wired_devices || 0;
                         const networksCount = data.active_networks || 1;
-                        document.getElementById("deviceOsSubtitle").textContent = `${totalDevices} devices (${wirelessCount} wireless, ${wiredCount} wired) from ${networksCount} network${networksCount > 1 ? 's' : ''}`;
+                        updateTextContent("deviceOsSubtitle", `${totalDevices} devices (${wirelessCount} wireless, ${wiredCount} wired) from ${networksCount} network${networksCount > 1 ? 's' : ''}`);
                     }
                 } catch (error) {
                     console.error("Error updating device OS chart:", error);
@@ -1473,7 +1533,7 @@
                         updateChartData(charts.frequency, freqCounts);
                         
                         const totalFreqDevices = freqCounts.reduce((a, b) => a + b, 0);
-                        document.getElementById("frequencySubtitle").textContent = `${totalFreqDevices} wireless devices`;
+                        updateTextContent("frequencySubtitle", `${totalFreqDevices} wireless devices`);
                     }
                 } catch (error) {
                     console.error("Error updating frequency chart:", error);
@@ -1509,7 +1569,7 @@
                     updateText = "⚠️ Data may be stale";
                 }
                 
-                document.getElementById("lastUpdate").textContent = updateText;
+                updateTextContent("lastUpdate", updateText);
                 
                 // Load network statistics for multi-network setups
                 await loadNetworkStats();

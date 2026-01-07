@@ -9,7 +9,7 @@ echo "📱 Adding mobile responsive design to MiniRack Dashboard..."
 sudo systemctl stop eero-dashboard
 
 # Download updated files
-echo "📥 Downloading v6.7.6-mobile with animation fixes..."
+echo "📥 Downloading v6.7.7-mobile with layout stability fixes..."
 sudo curl -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
 sudo curl -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
 
@@ -36,8 +36,8 @@ if sudo systemctl is-active --quiet eero-dashboard; then
     echo "✅ Dashboard service is running"
     
     # Test HTTP response
-    if curl -s http://localhost:5000/ | grep -q "6.7.6" 2>/dev/null; then
-        echo "✅ Version 6.7.6-mobile is live with animation fixes"
+    if curl -s http://localhost:5000/ | grep -q "6.7.7" 2>/dev/null; then
+        echo "✅ Version 6.7.7-mobile is live with layout stability fixes"
         
         # Restart nginx
         sudo systemctl restart nginx
@@ -57,13 +57,16 @@ if sudo systemctl is-active --quiet eero-dashboard; then
         echo "   ✅ Touch-optimized π admin button"
         echo "   ✅ No weird sliding animations - charts update smoothly"
         echo "   ✅ Static chart updates with no visual glitches"
+        echo "   ✅ Fixed layout dimensions prevent content shifts"
+        echo "   ✅ Stable grid layout with no reflow issues"
         echo ""
-        echo "📊 ANIMATION FIXES:"
-        echo "   • Disabled all chart animations"
-        echo "   • Smooth, instant chart updates"
-        echo "   • No sliding or moving effects"
+        echo "📊 LAYOUT STABILITY FIXES:"
+        echo "   • Fixed chart card heights to prevent layout shifts"
+        echo "   • Disabled all CSS animations and transitions globally"
+        echo "   • Stable grid dimensions across all screen sizes"
+        echo "   • Enhanced DOM update mechanism to prevent reflow"
         echo ""
-        echo "📲 Test on mobile device to verify smooth operation"
+        echo "📲 Test on mobile device - no more sliding animations!"
         echo ""
         echo "📊 RESPONSIVE BREAKPOINTS:"
         echo "   • Mobile: Single column chart layout"
