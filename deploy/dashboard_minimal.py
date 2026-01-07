@@ -17,7 +17,7 @@ import logging
 import pytz
 
 # Configuration
-VERSION = "6.7.1-persistent"
+VERSION = "6.7.2-email-auth"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
@@ -976,9 +976,16 @@ def authenticate_network(network_id):
             return jsonify({'success': False, 'message': 'Network not found'}), 404
         
         if step == 'send':
-            email = network.get('email', '')
+            # Allow email to be provided in request, fallback to stored email
+            email = data.get('email', '').strip()
             if not email:
-                return jsonify({'success': False, 'message': 'No email configured for this network'}), 400
+                email = network.get('email', '')
+            
+            if not email:
+                return jsonify({'success': False, 'message': 'Email address required for authentication'}), 400
+            
+            if '@' not in email:
+                return jsonify({'success': False, 'message': 'Invalid email address'}), 400
             
             logging.info(f"Sending verification code to {email} for network {network_id}")
             response = requests.post(

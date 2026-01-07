@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Network Dashboard v6.7.1 (Persistent)</title>
+    <title>Network Dashboard v6.7.2 (Email Auth)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -415,7 +415,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.7.1</span> • 
+                <span class="version">v6.7.2</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -1118,7 +1118,7 @@
                                     </div>
                                 </div>
                                 <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                                    ${!network.authenticated ? `<button class="form-btn" style="padding: 4px 8px; font-size: 11px;" onclick="authenticateNetwork('${network.id}')">Authenticate</button>` : ''}
+                                    ${!network.authenticated ? `<button class="form-btn" style="padding: 4px 8px; font-size: 11px;" onclick="authenticateNetwork('${network.id}')">Authenticate with Email</button>` : ''}
                                     <button class="form-btn" style="padding: 4px 8px; font-size: 11px; background: ${network.active ? '#868e96' : '#4da6ff'};" onclick="toggleNetwork('${network.id}')">${network.active ? 'Disable' : 'Enable'}</button>
                                     <button class="form-btn" style="padding: 4px 8px; font-size: 11px; background: #ff6b6b;" onclick="removeNetwork('${network.id}')">Remove</button>
                                 </div>
@@ -1230,12 +1230,36 @@
         }
         
         async function authenticateNetwork(networkId) {
+            // Show email input form first
+            document.getElementById("adminFormContainer").innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">Authenticate Network ${networkId}:</label>
+                    <p style="color: rgba(255,255,255,.7); font-size: 12px; margin-bottom: 15px;">
+                        Enter the email address to receive the verification code for this network.
+                    </p>
+                    <input type="email" id="authEmail" class="form-input" placeholder="Enter email address" style="margin-bottom: 10px;">
+                    <div style="display: flex; gap: 10px;">
+                        <button class="form-btn" onclick="sendNetworkAuthCode('${networkId}')">Send Code</button>
+                        <button class="form-btn" style="background: #868e96;" onclick="showNetworksManager()">Cancel</button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        async function sendNetworkAuthCode(networkId) {
+            const email = document.getElementById("authEmail").value.trim();
+            
+            if (!email || !email.includes("@")) {
+                showAlert("Valid email address required", "error");
+                return;
+            }
+            
             try {
-                // Send authentication code
+                // Send authentication code with email
                 const response = await fetch(`/api/admin/networks/${networkId}/auth`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ step: "send" })
+                    body: JSON.stringify({ step: "send", email: email })
                 });
                 
                 const data = await response.json();
@@ -1247,7 +1271,7 @@
                         <div class="form-group">
                             <label class="form-label">Authenticate Network ${networkId}:</label>
                             <p style="color: rgba(255,255,255,.7); font-size: 12px; margin-bottom: 15px;">
-                                A verification code has been sent to the email address for this network.
+                                A verification code has been sent to <strong>${email}</strong>.
                             </p>
                             <input type="text" id="authCode" class="form-input" placeholder="Enter verification code" style="margin-bottom: 10px;">
                             <div style="display: flex; gap: 10px;">
