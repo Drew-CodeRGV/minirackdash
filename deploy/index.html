@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Network Dashboard v6.7.0 (Multi-Network)</title>
+    <title>Network Dashboard v6.7.1 (Persistent)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -415,7 +415,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.7.0</span> • 
+                <span class="version">v6.7.1</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -517,6 +517,9 @@
         let charts = {};
         let isConfigured = false;
         let currentTimeRange = 1; // Default to 1 hour
+        let chartInitialized = false;
+        let dataLoadRetries = 0;
+        const MAX_RETRIES = 3;
         
         function changeTimeRange() {
             currentTimeRange = parseInt(document.getElementById('timeRange').value);
@@ -524,89 +527,138 @@
         }
         
         function initCharts() {
-            const commonOptions = {
-                maintainAspectRatio: false,
-                responsive: true,
-                plugins: {
-                    legend: {
-                        labels: {
-                            color: "#fff"
+            try {
+                if (chartInitialized) {
+                    console.log("Charts already initialized");
+                    return;
+                }
+                
+                console.log("Initializing charts...");
+                
+                const commonOptions = {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: "#fff"
+                            }
                         }
                     }
+                };
+                
+                // Connected Users Chart
+                const usersCtx = document.getElementById("usersChart");
+                if (!usersCtx) {
+                    console.error("Users chart canvas not found");
+                    return false;
                 }
-            };
-            
-            // Connected Users Chart
-            charts.users = new Chart(document.getElementById("usersChart").getContext("2d"), {
-                type: "line",
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: "Connected",
-                        data: [],
-                        borderColor: "#4da6ff",
-                        backgroundColor: "rgba(77,166,255,0.1)",
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: {
-                    ...commonOptions,
-                    scales: {
-                        y: { ticks: { color: "#fff" } },
-                        x: { ticks: { color: "#fff" } }
+                
+                charts.users = new Chart(usersCtx.getContext("2d"), {
+                    type: "line",
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: "Connected",
+                            data: [],
+                            borderColor: "#4da6ff",
+                            backgroundColor: "rgba(77,166,255,0.1)",
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        ...commonOptions,
+                        scales: {
+                            y: { 
+                                ticks: { color: "#fff" },
+                                beginAtZero: true
+                            },
+                            x: { ticks: { color: "#fff" } }
+                        }
                     }
+                });
+                
+                // Device OS Chart
+                const deviceOSCtx = document.getElementById("deviceOSChart");
+                if (!deviceOSCtx) {
+                    console.error("Device OS chart canvas not found");
+                    return false;
                 }
-            });
-            
-            // Device OS Chart
-            charts.deviceOS = new Chart(document.getElementById("deviceOSChart").getContext("2d"), {
-                type: "doughnut",
-                data: {
-                    labels: ["iOS", "Android", "Windows", "Amazon", "Gaming", "Streaming", "Other"],
-                    datasets: [{
-                        data: [0, 0, 0, 0, 0, 0, 0],
-                        backgroundColor: ["#4da6ff", "#51cf66", "#74c0fc", "#ff922b", "#e599f7", "#ffd43b", "#868e96"]
-                    }]
-                },
-                options: commonOptions
-            });
-            
-            // Frequency Chart
-            charts.frequency = new Chart(document.getElementById("frequencyChart").getContext("2d"), {
-                type: "doughnut",
-                data: {
-                    labels: ["2.4 GHz", "5 GHz", "6 GHz"],
-                    datasets: [{
-                        data: [0, 0, 0],
-                        backgroundColor: ["#ff922b", "#4da6ff", "#b197fc"]
-                    }]
-                },
-                options: commonOptions
-            });
-            
-            // Signal Strength Chart
-            charts.signalStrength = new Chart(document.getElementById("signalStrengthChart").getContext("2d"), {
-                type: "line",
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: "Avg Signal",
-                        data: [],
-                        borderColor: "#51cf66",
-                        backgroundColor: "rgba(81,207,102,0.1)",
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: {
-                    ...commonOptions,
-                    scales: {
-                        y: { ticks: { color: "#fff" } },
-                        x: { ticks: { color: "#fff" } }
+                
+                charts.deviceOS = new Chart(deviceOSCtx.getContext("2d"), {
+                    type: "doughnut",
+                    data: {
+                        labels: ["iOS", "Android", "Windows", "Amazon", "Gaming", "Streaming", "Other"],
+                        datasets: [{
+                            data: [0, 0, 0, 0, 0, 0, 0],
+                            backgroundColor: ["#4da6ff", "#51cf66", "#74c0fc", "#ff922b", "#e599f7", "#ffd43b", "#868e96"]
+                        }]
+                    },
+                    options: commonOptions
+                });
+                
+                // Frequency Chart
+                const frequencyCtx = document.getElementById("frequencyChart");
+                if (!frequencyCtx) {
+                    console.error("Frequency chart canvas not found");
+                    return false;
+                }
+                
+                charts.frequency = new Chart(frequencyCtx.getContext("2d"), {
+                    type: "doughnut",
+                    data: {
+                        labels: ["2.4 GHz", "5 GHz", "6 GHz"],
+                        datasets: [{
+                            data: [0, 0, 0],
+                            backgroundColor: ["#ff922b", "#4da6ff", "#b197fc"]
+                        }]
+                    },
+                    options: commonOptions
+                });
+                
+                // Signal Strength Chart
+                const signalStrengthCtx = document.getElementById("signalStrengthChart");
+                if (!signalStrengthCtx) {
+                    console.error("Signal strength chart canvas not found");
+                    return false;
+                }
+                
+                charts.signalStrength = new Chart(signalStrengthCtx.getContext("2d"), {
+                    type: "line",
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: "Avg Signal",
+                            data: [],
+                            borderColor: "#51cf66",
+                            backgroundColor: "rgba(81,207,102,0.1)",
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        ...commonOptions,
+                        scales: {
+                            y: { 
+                                ticks: { color: "#fff" },
+                                min: -100,
+                                max: -30
+                            },
+                            x: { ticks: { color: "#fff" } }
+                        }
                     }
-                }
-            });
+                });
+                
+                chartInitialized = true;
+                console.log("Charts initialized successfully");
+                return true;
+                
+            } catch (error) {
+                console.error("Chart initialization error:", error);
+                chartInitialized = false;
+                return false;
+            }
         }
         
         async function loadNetworkName() {
@@ -627,9 +679,32 @@
         
         async function updateDashboardData() {
             try {
+                // Ensure charts are initialized before updating data
+                if (!chartInitialized) {
+                    console.log("Charts not initialized, attempting to initialize...");
+                    if (!initCharts()) {
+                        console.error("Failed to initialize charts, retrying in 2 seconds...");
+                        setTimeout(updateDashboardData, 2000);
+                        return;
+                    }
+                }
+                
                 // Always fetch fresh data and apply filtering client-side for better reliability
                 const response = await fetch('/api/dashboard');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                
+                // Validate data structure
+                if (!data || typeof data !== 'object') {
+                    throw new Error('Invalid data structure received');
+                }
+                
+                // Reset retry counter on successful data fetch
+                dataLoadRetries = 0;
                 
                 // Check if we have data (indicates configuration is working)
                 if (data.connected_users && data.connected_users.length > 0) {
@@ -654,51 +729,77 @@
                 // Apply client-side time filtering
                 const filteredData = filterDataByTimeRange(data, currentTimeRange);
                 
-                // Update Connected Users Chart
-                charts.users.data.labels = filteredData.connected_users.map(entry => 
-                    new Date(entry.timestamp).toLocaleTimeString()
-                );
-                charts.users.data.datasets[0].data = filteredData.connected_users.map(entry => Math.round(entry.count));
-                charts.users.update();
+                // Safely update charts with error handling
+                try {
+                    // Update Connected Users Chart
+                    if (charts.users && filteredData.connected_users) {
+                        charts.users.data.labels = filteredData.connected_users.map(entry => 
+                            new Date(entry.timestamp).toLocaleTimeString()
+                        );
+                        charts.users.data.datasets[0].data = filteredData.connected_users.map(entry => Math.round(entry.count));
+                        charts.users.update('none'); // Use 'none' animation for better performance
+                    }
+                } catch (error) {
+                    console.error("Error updating users chart:", error);
+                }
                 
-                // Update Device OS Chart (use current data, not time-filtered)
-                const deviceOS = data.device_os || {};
-                const deviceCounts = [
-                    Math.round(deviceOS.iOS || 0),
-                    Math.round(deviceOS.Android || 0),
-                    Math.round(deviceOS.Windows || 0),
-                    Math.round(deviceOS.Amazon || 0),
-                    Math.round(deviceOS.Gaming || 0),
-                    Math.round(deviceOS.Streaming || 0),
-                    Math.round(deviceOS.Other || 0)
-                ];
-                charts.deviceOS.data.datasets[0].data = deviceCounts;
-                charts.deviceOS.update();
+                try {
+                    // Update Device OS Chart (use current data, not time-filtered)
+                    if (charts.deviceOS && data.device_os) {
+                        const deviceOS = data.device_os || {};
+                        const deviceCounts = [
+                            Math.round(deviceOS.iOS || 0),
+                            Math.round(deviceOS.Android || 0),
+                            Math.round(deviceOS.Windows || 0),
+                            Math.round(deviceOS.Amazon || 0),
+                            Math.round(deviceOS.Gaming || 0),
+                            Math.round(deviceOS.Streaming || 0),
+                            Math.round(deviceOS.Other || 0)
+                        ];
+                        charts.deviceOS.data.datasets[0].data = deviceCounts;
+                        charts.deviceOS.update('none');
+                        
+                        const totalDevices = deviceCounts.reduce((a, b) => a + b, 0);
+                        const wirelessCount = data.wireless_devices || 0;
+                        const wiredCount = data.wired_devices || 0;
+                        const networksCount = data.active_networks || 1;
+                        document.getElementById("deviceOsSubtitle").textContent = `${totalDevices} devices (${wirelessCount} wireless, ${wiredCount} wired) from ${networksCount} network${networksCount > 1 ? 's' : ''}`;
+                    }
+                } catch (error) {
+                    console.error("Error updating device OS chart:", error);
+                }
                 
-                const totalDevices = deviceCounts.reduce((a, b) => a + b, 0);
-                const wirelessCount = data.wireless_devices || 0;
-                const wiredCount = data.wired_devices || 0;
-                document.getElementById("deviceOsSubtitle").textContent = `${totalDevices} devices (${wirelessCount} wireless, ${wiredCount} wired)`;
+                try {
+                    // Update Frequency Chart (wireless devices only)
+                    if (charts.frequency && data.frequency_distribution) {
+                        const freqDist = data.frequency_distribution || {};
+                        const freqCounts = [
+                            Math.round(freqDist["2.4GHz"] || 0),
+                            Math.round(freqDist["5GHz"] || 0),
+                            Math.round(freqDist["6GHz"] || 0)
+                        ];
+                        charts.frequency.data.datasets[0].data = freqCounts;
+                        charts.frequency.update('none');
+                        
+                        const totalFreqDevices = freqCounts.reduce((a, b) => a + b, 0);
+                        document.getElementById("frequencySubtitle").textContent = `${totalFreqDevices} wireless devices`;
+                    }
+                } catch (error) {
+                    console.error("Error updating frequency chart:", error);
+                }
                 
-                // Update Frequency Chart (wireless devices only)
-                const freqDist = data.frequency_distribution || {};
-                const freqCounts = [
-                    Math.round(freqDist["2.4GHz"] || 0),
-                    Math.round(freqDist["5GHz"] || 0),
-                    Math.round(freqDist["6GHz"] || 0)
-                ];
-                charts.frequency.data.datasets[0].data = freqCounts;
-                charts.frequency.update();
-                
-                const totalFreqDevices = freqCounts.reduce((a, b) => a + b, 0);
-                document.getElementById("frequencySubtitle").textContent = `${totalFreqDevices} wireless devices`;
-                
-                // Update Signal Strength Chart
-                charts.signalStrength.data.labels = filteredData.signal_strength_avg.map(entry => 
-                    new Date(entry.timestamp).toLocaleTimeString()
-                );
-                charts.signalStrength.data.datasets[0].data = filteredData.signal_strength_avg.map(entry => entry.avg_dbm);
-                charts.signalStrength.update();
+                try {
+                    // Update Signal Strength Chart
+                    if (charts.signalStrength && filteredData.signal_strength_avg) {
+                        charts.signalStrength.data.labels = filteredData.signal_strength_avg.map(entry => 
+                            new Date(entry.timestamp).toLocaleTimeString()
+                        );
+                        charts.signalStrength.data.datasets[0].data = filteredData.signal_strength_avg.map(entry => entry.avg_dbm);
+                        charts.signalStrength.update('none');
+                    }
+                } catch (error) {
+                    console.error("Error updating signal strength chart:", error);
+                }
                 
                 // Update last update time
                 const lastUpdate = new Date(data.last_update);
@@ -721,7 +822,18 @@
                     
             } catch (error) {
                 console.error("Dashboard update error:", error);
-                document.getElementById("lastUpdate").textContent = "Update failed";
+                dataLoadRetries++;
+                
+                if (dataLoadRetries <= MAX_RETRIES) {
+                    console.log(`Retrying data load (attempt ${dataLoadRetries}/${MAX_RETRIES}) in 3 seconds...`);
+                    document.getElementById("lastUpdate").textContent = `Retry ${dataLoadRetries}/${MAX_RETRIES}...`;
+                    setTimeout(updateDashboardData, 3000);
+                } else {
+                    document.getElementById("lastUpdate").textContent = "Update failed";
+                    document.getElementById("lastUpdate").style.color = "#ff6b6b";
+                    // Reset retry counter after max attempts
+                    setTimeout(() => { dataLoadRetries = 0; }, 30000);
+                }
             }
         }
         
@@ -871,6 +983,10 @@
         
         async function updateDashboard() {
             try {
+                // Save current data before updating
+                console.log("Saving current data before update...");
+                await fetch("/api/admin/backup-data", { method: "POST" });
+                
                 const response = await fetch("/api/admin/update", { method: "POST" });
                 const data = await response.json();
                 showAlert(data.message, data.success ? "success" : "error");
@@ -1250,11 +1366,44 @@
         
         // Initialize everything when page loads
         window.addEventListener("load", () => {
-            initCharts();
-            loadNetworkName();
-            updateDashboardData();
-            setInterval(updateDashboardData, 60000); // Update every minute
-            setInterval(loadNetworkName, 300000); // Update network name every 5 minutes
+            console.log("Page loaded, initializing dashboard...");
+            
+            // Initialize charts first
+            if (initCharts()) {
+                console.log("Charts initialized successfully");
+                
+                // Load network name
+                loadNetworkName();
+                
+                // Initial data update
+                updateDashboardData();
+                
+                // Set up intervals
+                setInterval(updateDashboardData, 60000); // Update every minute
+                setInterval(loadNetworkName, 300000); // Update network name every 5 minutes
+            } else {
+                console.error("Failed to initialize charts, retrying in 2 seconds...");
+                setTimeout(() => {
+                    if (initCharts()) {
+                        loadNetworkName();
+                        updateDashboardData();
+                        setInterval(updateDashboardData, 60000);
+                        setInterval(loadNetworkName, 300000);
+                    }
+                }, 2000);
+            }
+        });
+        
+        // Also try to initialize on DOMContentLoaded as backup
+        document.addEventListener("DOMContentLoaded", () => {
+            console.log("DOM content loaded");
+            // Small delay to ensure all elements are rendered
+            setTimeout(() => {
+                if (!chartInitialized) {
+                    console.log("Charts not yet initialized, attempting...");
+                    initCharts();
+                }
+            }, 500);
         });
     </script>
 </body>

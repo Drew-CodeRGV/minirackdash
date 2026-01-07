@@ -17,10 +17,11 @@ import logging
 import pytz
 
 # Configuration
-VERSION = "6.7.0-multinetwork"
+VERSION = "6.7.1-persistent"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
+DATA_CACHE_FILE = "/opt/eero/app/data_cache.json"
 
 # Setup logging
 logging.basicConfig(
@@ -90,6 +91,71 @@ def get_timezone_aware_now():
     except Exception as e:
         logging.warning("Timezone error, using UTC: " + str(e))
         return datetime.now(pytz.UTC)
+
+def save_data_cache():
+    """Save data cache to disk for persistence"""
+    try:
+        # Create a serializable copy of the cache
+        cache_copy = {}
+        for key, value in data_cache.items():
+            if key == 'networks':
+                # Save network data
+                cache_copy[key] = {}
+                for net_id, net_data in value.items():
+                    cache_copy[key][net_id] = net_data.copy()
+            else:
+                cache_copy[key] = value.copy() if isinstance(value, dict) else value
+        
+        # Add timestamp for cache validation
+        cache_copy['_saved_at'] = get_timezone_aware_now().isoformat()
+        
+        with open(DATA_CACHE_FILE, 'w') as f:
+            json.dump(cache_copy, f, indent=2)
+        
+        # Set proper permissions
+        os.chmod(DATA_CACHE_FILE, 0o644)
+        logging.info("Data cache saved to disk")
+        return True
+    except Exception as e:
+        logging.error("Failed to save data cache: " + str(e))
+        return False
+
+def load_data_cache():
+    """Load data cache from disk"""
+    try:
+        if os.path.exists(DATA_CACHE_FILE):
+            with open(DATA_CACHE_FILE, 'r') as f:
+                saved_cache = json.load(f)
+            
+            # Check if cache is not too old (max 24 hours)
+            saved_at = saved_cache.get('_saved_at')
+            if saved_at:
+                saved_time = datetime.fromisoformat(saved_at.replace('Z', '+00:00'))
+                current_time = get_timezone_aware_now()
+                
+                # Convert to UTC for comparison if needed
+                if saved_time.tzinfo is None:
+                    saved_time = pytz.UTC.localize(saved_time)
+                if current_time.tzinfo != saved_time.tzinfo:
+                    current_time = current_time.astimezone(pytz.UTC)
+                    saved_time = saved_time.astimezone(pytz.UTC)
+                
+                age_hours = (current_time - saved_time).total_seconds() / 3600
+                
+                if age_hours > 24:
+                    logging.info(f"Cached data is {age_hours:.1f} hours old, starting fresh")
+                    return None
+            
+            # Remove metadata
+            if '_saved_at' in saved_cache:
+                del saved_cache['_saved_at']
+            
+            logging.info("Loaded data cache from disk")
+            return saved_cache
+    except Exception as e:
+        logging.error("Failed to load data cache: " + str(e))
+    
+    return None
 
 class EeroAPI:
     def __init__(self):
@@ -189,18 +255,33 @@ class EeroAPI:
 # Initialize API
 eero_api = EeroAPI()
 
-# Data cache - now supports multiple networks
-data_cache = {
-    'networks': {},  # Will store data per network ID
-    'combined': {     # Combined data from all active networks
-        'connected_users': [],
-        'device_os': {},
-        'frequency_distribution': {},
-        'signal_strength_avg': [],
-        'devices': [],
-        'last_update': None
+# Data cache - now supports multiple networks with persistence
+def initialize_data_cache():
+    """Initialize data cache, loading from disk if available"""
+    default_cache = {
+        'networks': {},  # Will store data per network ID
+        'combined': {     # Combined data from all active networks
+            'connected_users': [],
+            'device_os': {},
+            'frequency_distribution': {},
+            'signal_strength_avg': [],
+            'devices': [],
+            'last_update': None
+        }
     }
-}
+    
+    # Try to load existing cache
+    saved_cache = load_data_cache()
+    if saved_cache:
+        # Merge saved cache with default structure
+        for key in default_cache:
+            if key in saved_cache:
+                default_cache[key] = saved_cache[key]
+        logging.info("Restored data cache from disk")
+    
+    return default_cache
+
+data_cache = initialize_data_cache()
 
 def detect_device_os(device):
     """Detect device OS from manufacturer and hostname"""
@@ -491,11 +572,16 @@ def update_cache():
         
         logging.info(f"Multi-network cache updated: {len(active_networks)} networks, {total_combined_devices} total devices")
         
+        # Save cache to disk for persistence
+        save_data_cache()
+        
     except Exception as e:
         logging.error("Multi-network cache update error: " + str(e))
         # Update last_update timestamp even on error
         current_time = get_timezone_aware_now()
         data_cache['combined']['last_update'] = current_time.isoformat()
+        # Still try to save cache even on error to preserve existing data
+        save_data_cache()
 
 def filter_data_by_timerange(data, hours):
     """Filter time-series data by hours"""
@@ -639,6 +725,24 @@ def get_version():
         'timestamp': current_time.isoformat(),
         'local_time': current_time.strftime('%Y-%m-%d %H:%M:%S %Z')
     })
+
+@app.route('/api/admin/backup-data', methods=['POST'])
+def backup_data():
+    """Backup current data cache before operations"""
+    try:
+        if save_data_cache():
+            # Also create a timestamped backup
+            backup_file = f"/opt/eero/app/data_cache_backup_{int(time.time())}.json"
+            import shutil
+            shutil.copy2(DATA_CACHE_FILE, backup_file)
+            os.chmod(backup_file, 0o644)
+            
+            return jsonify({'success': True, 'message': 'Data backed up successfully'})
+        else:
+            return jsonify({'success': False, 'message': 'Failed to backup data'}), 500
+    except Exception as e:
+        logging.error(f"Backup error: {str(e)}")
+        return jsonify({'success': False, 'message': f'Backup error: {str(e)}'}), 500
 
 @app.route('/api/admin/update', methods=['POST'])
 def update_dashboard():
