@@ -53,10 +53,18 @@ echo "✅ Files downloaded successfully"
 echo "🐍 Setting up Python environment..."
 cd /opt/eero
 
-if [ ! -d "venv" ]; then
-    sudo -u www-data python3 -m venv venv
+# Remove existing venv if it has permission issues
+if [ -d "venv" ]; then
+    echo "   Removing existing venv with potential permission issues..."
+    sudo rm -rf venv
 fi
 
+# Create fresh virtual environment
+echo "   Creating fresh virtual environment..."
+sudo -u www-data python3 -m venv venv
+
+# Install packages
+echo "   Installing Python packages..."
 sudo -u www-data /opt/eero/venv/bin/pip install --upgrade pip
 sudo -u www-data /opt/eero/venv/bin/pip install -r app/requirements.txt
 
