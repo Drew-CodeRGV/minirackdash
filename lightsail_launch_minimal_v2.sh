@@ -1,6 +1,6 @@
 #!/bin/bash
-# MiniRack Dashboard - Lightsail Launch Script (Under 16KB)
-# Downloads and installs the full v6.7.1 dashboard from GitHub
+# MiniRack Dashboard - Ultra Minimal Lightsail Launch Script (Under 16KB)
+# Downloads and installs the full dashboard from GitHub
 
 set -e
 export LC_ALL=C.UTF-8
@@ -14,7 +14,7 @@ apt-get install -y python3-pip nginx curl python3-venv
 mkdir -p /opt/eero/{app,logs}
 
 # Download application files from GitHub
-echo "📥 Downloading MiniRack Dashboard v6.7.1..."
+echo "Downloading dashboard files..."
 curl -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
 curl -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
 curl -o /opt/eero/app/config.json https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/config.json
@@ -25,8 +25,6 @@ if [ ! -f "/opt/eero/app/dashboard.py" ] || [ ! -f "/opt/eero/app/index.html" ];
     echo "❌ Download failed"
     exit 1
 fi
-
-echo "✅ Files downloaded successfully"
 
 # Setup Python environment
 cd /opt/eero
@@ -108,17 +106,13 @@ systemctl enable eero-dashboard
 systemctl start eero-dashboard
 
 # Wait for Flask app
-echo "⏳ Starting dashboard service..."
+echo "⏳ Starting dashboard..."
 for i in {1..20}; do
     if curl -f http://localhost:5000/health > /dev/null 2>&1; then
-        echo "✅ Dashboard service ready"
+        echo "✅ Dashboard ready"
         break
     fi
-    if [ $i -eq 20 ]; then
-        echo "❌ Dashboard service failed to start"
-        systemctl status eero-dashboard
-        exit 1
-    fi
+    [ $i -eq 20 ] && { echo "❌ Dashboard failed"; systemctl status eero-dashboard; exit 1; }
     sleep 2
 done
 
@@ -127,17 +121,13 @@ systemctl enable nginx
 systemctl restart nginx
 
 # Verify complete setup
-echo "🔍 Testing nginx proxy..."
+echo "🔍 Testing setup..."
 for i in {1..10}; do
     if curl -f http://localhost/ | grep -q "Dashboard" 2>/dev/null; then
-        echo "✅ Nginx proxy working"
+        echo "✅ Setup complete!"
         break
     fi
-    if [ $i -eq 10 ]; then
-        echo "❌ Nginx proxy failed"
-        systemctl status nginx
-        exit 1
-    fi
+    [ $i -eq 10 ] && { echo "❌ Nginx failed"; exit 1; }
     sleep 2
 done
 
@@ -147,23 +137,9 @@ ufw allow 22/tcp
 ufw --force enable
 
 # Success message
-PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "your-lightsail-ip")
+PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "your-ip")
 echo ""
 echo "🎉 MiniRack Dashboard v6.7.1 installed successfully!"
-echo "🌐 Access your dashboard: http://$PUBLIC_IP"
-echo ""
-echo "🆕 FEATURES INCLUDED:"
-echo "   • Multi-network monitoring (up to 6 networks)"
-echo "   • Individual API authentication per network"
-echo "   • Timezone configuration"
-echo "   • Data persistence across restarts"
-echo "   • Chart reliability improvements"
-echo "   • π Admin panel with full management"
-echo ""
-echo "🔧 NEXT STEPS:"
-echo "   1. Click the π button (bottom-right corner)"
-echo "   2. Go to 'Manage Networks' to add your networks"
-echo "   3. Configure timezone in admin panel"
-echo "   4. Authenticate each network individually"
-echo ""
-echo "📋 Version: 6.7.1-persistent with multi-network support"
+echo "🌐 Access: http://$PUBLIC_IP"
+echo "🔧 Configure via π admin menu (bottom-right)"
+echo "📋 Features: Multi-network support, timezone config, data persistence"
