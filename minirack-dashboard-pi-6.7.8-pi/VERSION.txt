@@ -1,0 +1,19 @@
+MiniRack Dashboard - Raspberry Pi Edition
+Version: 6.7.8-pi
+Build Date: Wed Jan  7 09:50:04 PST 2026
+Target: Raspberry Pi 5 (compatible with Pi 4)
+Base OS: Raspberry Pi OS Lite (64-bit)
+
+Features:
+- Automatic installation and setup
+- Email IP notifications to drew@drewlentz.com
+- Web-based dashboard on port 80
+- Multi-network Eero monitoring
+- Mobile responsive design
+- Real-time device analytics
+
+Files:
+- raspberry-pi-install.sh: Direct installation script
+- create-pi-image.sh: Custom image builder
+- pi-first-boot.sh: First-boot setup script
+- dashboard/: Dashboard application files
