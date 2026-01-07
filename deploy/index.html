@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=3.0">
-    <title>Network Dashboard v6.7.4 (Mobile)</title>
+    <title>Network Dashboard v6.7.5 (Mobile)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -173,8 +173,9 @@
             border: 1px solid rgba(255,255,255,.1); 
             display: flex; 
             flex-direction: column;
-            min-height: 250px;
+            min-height: 280px;
             max-height: 400px;
+            align-items: stretch;
         }
         
         .chart-title { 
@@ -184,6 +185,7 @@
             text-align: center; 
             color: #4da6ff; 
             text-transform: uppercase; 
+            flex-shrink: 0;
         }
         
         .chart-subtitle { 
@@ -192,15 +194,17 @@
             color: rgba(255,255,255,.6); 
             margin-bottom: 8px;
             line-height: 1.3;
+            flex-shrink: 0;
         }
         
         .chart-container { 
             flex: 1; 
             position: relative; 
-            min-height: 180px; 
+            min-height: 200px; 
             display: flex; 
             align-items: center; 
             justify-content: center;
+            overflow: hidden;
         }
         
         canvas { 
@@ -210,7 +214,98 @@
             height: auto !important; 
         }
         
-        /* Mobile-optimized modals */
+        /* Network statistics display */
+        .network-stats {
+            background: rgba(0,40,80,.5);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid rgba(77,166,255,.2);
+        }
+        
+        .network-stats-title {
+            font-size: clamp(14px, 3.5vw, 16px);
+            font-weight: 600;
+            color: #4da6ff;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        
+        .network-item {
+            background: rgba(0,20,40,.6);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: 1px solid rgba(77,166,255,.1);
+        }
+        
+        .network-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .network-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        
+        .network-name {
+            font-size: clamp(12px, 3vw, 14px);
+            font-weight: 600;
+            color: #4da6ff;
+        }
+        
+        .network-id {
+            font-size: clamp(10px, 2.5vw, 11px);
+            color: rgba(255,255,255,.6);
+        }
+        
+        .network-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            font-size: clamp(10px, 2.5vw, 11px);
+        }
+        
+        .network-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+        }
+        
+        .network-stat-label {
+            color: rgba(255,255,255,.7);
+        }
+        
+        .network-stat-value {
+            color: #fff;
+            font-weight: 500;
+        }
+        
+        .frequency-breakdown {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255,255,255,.1);
+        }
+        
+        .frequency-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 1px 0;
+            font-size: clamp(9px, 2vw, 10px);
+        }
+        
+        .frequency-label {
+            color: rgba(255,255,255,.6);
+        }
+        
+        .frequency-count {
+            color: #4da6ff;
+            font-weight: 500;
+        }
         .modal { 
             display: none; 
             position: fixed; 
@@ -540,8 +635,13 @@
             }
             
             .chart-card {
-                min-height: 300px;
+                min-height: 320px;
                 max-height: 450px;
+                padding: 15px;
+            }
+            
+            .chart-container {
+                min-height: 220px;
             }
             
             .header {
@@ -557,6 +657,10 @@
                 grid-template-columns: 1fr 1fr;
                 gap: 8px;
             }
+            
+            .network-details {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
         
         /* Desktop adjustments */
@@ -569,11 +673,18 @@
             .dashboard-container {
                 grid-template-columns: repeat(4, 1fr);
                 height: calc(100vh - 60px);
+                padding: 20px;
+                gap: 20px;
             }
             
             .chart-card {
                 min-height: auto;
                 max-height: none;
+                padding: 20px;
+            }
+            
+            .chart-container {
+                min-height: auto;
             }
             
             .modal.active {
@@ -584,6 +695,18 @@
             .modal-content {
                 max-width: 800px;
                 padding: 30px;
+            }
+            
+            .network-details {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            
+            #networkStatsContainer {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                max-width: 400px;
+                z-index: 100;
             }
         }
         
@@ -839,7 +962,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.7.4-mobile</span> • 
+                <span class="version">v6.7.5-mobile</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -884,6 +1007,14 @@
             <div class="chart-title">Average Signal Strength</div>
             <div class="chart-subtitle">Wireless devices only (dBm)</div>
             <div class="chart-container"><canvas id="signalStrengthChart"></canvas></div>
+        </div>
+    </div>
+    
+    <!-- Network Statistics Section -->
+    <div id="networkStatsContainer" style="display: none;">
+        <div class="network-stats">
+            <div class="network-stats-title">Per-Network Statistics</div>
+            <div id="networkStatsList"></div>
         </div>
     </div>
     
@@ -965,8 +1096,19 @@
                     plugins: {
                         legend: {
                             labels: {
-                                color: "#fff"
-                            }
+                                color: "#fff",
+                                padding: 10,
+                                usePointStyle: true
+                            },
+                            position: 'bottom'
+                        }
+                    },
+                    layout: {
+                        padding: {
+                            top: 5,
+                            bottom: 5,
+                            left: 5,
+                            right: 5
                         }
                     }
                 };
@@ -1099,6 +1241,91 @@
                 console.error("Error loading network name:", error);
                 document.getElementById("networkName").textContent = "Network Event Dashboard";
             }
+        }
+        
+        async function loadNetworkStats() {
+            try {
+                const response = await fetch("/api/network-stats");
+                const data = await response.json();
+                
+                if (data.networks && data.networks.length > 1) {
+                    // Show network stats if multiple networks
+                    document.getElementById("networkStatsContainer").style.display = "block";
+                    displayNetworkStats(data.networks);
+                } else {
+                    // Hide network stats for single network
+                    document.getElementById("networkStatsContainer").style.display = "none";
+                }
+            } catch (error) {
+                console.error("Error loading network stats:", error);
+                document.getElementById("networkStatsContainer").style.display = "none";
+            }
+        }
+        
+        function displayNetworkStats(networks) {
+            const container = document.getElementById("networkStatsList");
+            
+            container.innerHTML = networks.map(network => {
+                const deviceOsEntries = Object.entries(network.device_os || {})
+                    .filter(([key, value]) => value > 0)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .join(', ') || 'None';
+                
+                const frequencyEntries = Object.entries(network.frequency_distribution || {})
+                    .filter(([key, value]) => value > 0);
+                
+                const frequencyHtml = frequencyEntries.length > 0 
+                    ? frequencyEntries.map(([freq, count]) => 
+                        `<div class="frequency-item">
+                            <span class="frequency-label">${freq}:</span>
+                            <span class="frequency-count">${count} devices</span>
+                        </div>`
+                    ).join('')
+                    : '<div class="frequency-item"><span class="frequency-label">No wireless devices</span></div>';
+                
+                const lastUpdate = network.last_successful_update 
+                    ? new Date(network.last_successful_update).toLocaleTimeString()
+                    : 'Never';
+                
+                return `
+                    <div class="network-item">
+                        <div class="network-header">
+                            <div class="network-name">${network.api_name || network.name}</div>
+                            <div class="network-id">ID: ${network.id}</div>
+                        </div>
+                        <div class="network-details">
+                            <div class="network-stat">
+                                <span class="network-stat-label">Total Devices:</span>
+                                <span class="network-stat-value">${network.total_devices || 0}</span>
+                            </div>
+                            <div class="network-stat">
+                                <span class="network-stat-label">Wireless:</span>
+                                <span class="network-stat-value">${network.wireless_devices || 0}</span>
+                            </div>
+                            <div class="network-stat">
+                                <span class="network-stat-label">Wired:</span>
+                                <span class="network-stat-value">${network.wired_devices || 0}</span>
+                            </div>
+                            <div class="network-stat">
+                                <span class="network-stat-label">Last Update:</span>
+                                <span class="network-stat-value">${lastUpdate}</span>
+                            </div>
+                        </div>
+                        <div class="network-details">
+                            <div class="network-stat" style="grid-column: 1 / -1;">
+                                <span class="network-stat-label">Device Types:</span>
+                                <span class="network-stat-value">${deviceOsEntries}</span>
+                            </div>
+                        </div>
+                        ${frequencyEntries.length > 0 ? `
+                            <div class="frequency-breakdown">
+                                <div style="font-size: clamp(10px, 2.5vw, 11px); color: rgba(255,255,255,.7); margin-bottom: 4px;">Frequency Distribution:</div>
+                                ${frequencyHtml}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
         }
         
         async function updateDashboardData() {
@@ -1243,6 +1470,9 @@
                 }
                 
                 document.getElementById("lastUpdate").textContent = updateText;
+                
+                // Load network statistics for multi-network setups
+                await loadNetworkStats();
                     
             } catch (error) {
                 console.error("Dashboard update error:", error);

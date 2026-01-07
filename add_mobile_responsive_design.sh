@@ -9,7 +9,7 @@ echo "📱 Adding mobile responsive design to MiniRack Dashboard..."
 sudo systemctl stop eero-dashboard
 
 # Download updated files
-echo "📥 Downloading v6.7.4-mobile with CSS fix..."
+echo "📥 Downloading v6.7.5-mobile with improved alignment and network stats..."
 sudo curl -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
 sudo curl -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
 
@@ -36,8 +36,8 @@ if sudo systemctl is-active --quiet eero-dashboard; then
     echo "✅ Dashboard service is running"
     
     # Test HTTP response
-    if curl -s http://localhost:5000/ | grep -q "6.7.4" 2>/dev/null; then
-        echo "✅ Version 6.7.4-mobile is live with responsive design"
+    if curl -s http://localhost:5000/ | grep -q "6.7.5" 2>/dev/null; then
+        echo "✅ Version 6.7.5-mobile is live with improved alignment and network stats"
         
         # Restart nginx
         sudo systemctl restart nginx

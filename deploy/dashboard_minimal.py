@@ -17,7 +17,7 @@ import logging
 import pytz
 
 # Configuration
-VERSION = "6.7.4-mobile"
+VERSION = "6.7.5-mobile"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
@@ -697,6 +697,58 @@ def get_network_info():
             'success': False,
             'error': str(e)
         })
+
+@app.route('/api/network-stats')
+def get_network_stats():
+    """Get detailed statistics for each network"""
+    try:
+        config = load_config()
+        networks = config.get('networks', [])
+        active_networks = [n for n in networks if n.get('active', True)]
+        
+        network_stats = []
+        
+        for network in active_networks:
+            network_id = network.get('id')
+            if not network_id or network_id not in data_cache.get('networks', {}):
+                continue
+                
+            network_cache = data_cache['networks'][network_id]
+            
+            # Get network info
+            network_info = {
+                'id': network_id,
+                'name': network.get('name', f'Network {network_id}'),
+                'authenticated': network_id in eero_api.network_tokens,
+                'total_devices': network_cache.get('total_devices', 0),
+                'wireless_devices': network_cache.get('wireless_devices', 0),
+                'wired_devices': network_cache.get('wired_devices', 0),
+                'device_os': network_cache.get('device_os', {}),
+                'frequency_distribution': network_cache.get('frequency_distribution', {}),
+                'last_update': network_cache.get('last_update'),
+                'last_successful_update': network_cache.get('last_successful_update')
+            }
+            
+            # Add API network name if available
+            if network_info['authenticated']:
+                try:
+                    api_network_info = eero_api.get_network_info(network_id)
+                    if api_network_info.get('name'):
+                        network_info['api_name'] = api_network_info['name']
+                except:
+                    pass
+            
+            network_stats.append(network_info)
+        
+        return jsonify({
+            'networks': network_stats,
+            'total_networks': len(network_stats),
+            'combined_stats': data_cache.get('combined', {})
+        })
+        
+    except Exception as e:
+        logging.error(f"Network stats error: {str(e)}")
+        return jsonify({'networks': [], 'total_networks': 0, 'combined_stats': {}}), 500
 
 @app.route('/api/devices')
 def get_devices():
