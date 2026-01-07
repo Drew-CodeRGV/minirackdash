@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Network Dashboard v6.6.0 (Timezone)</title>
+    <title>Network Dashboard v6.7.0 (Multi-Network)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -415,7 +415,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.6.0</span> • 
+                <span class="version">v6.7.0</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -495,14 +495,17 @@
                 <button class="admin-btn" onclick="updateDashboard()">
                     <i class="fas fa-sync"></i><span>Check for Updated Dashboard Code</span>
                 </button>
+                <button class="admin-btn" onclick="showNetworksManager()">
+                    <i class="fas fa-network-wired"></i><span>Manage Networks</span>
+                </button>
                 <button class="admin-btn" onclick="showNetworkIdForm()">
-                    <i class="fas fa-network-wired"></i><span>Change Network ID</span>
+                    <i class="fas fa-edit"></i><span>Quick Network ID Change</span>
                 </button>
                 <button class="admin-btn" onclick="showTimezoneForm()">
                     <i class="fas fa-clock"></i><span>Change Timezone</span>
                 </button>
                 <button class="admin-btn" onclick="showReauthorizeForm()">
-                    <i class="fas fa-key"></i><span>Reauthorize API</span>
+                    <i class="fas fa-key"></i><span>Legacy Reauthorize</span>
                 </button>
             </div>
             <div id="adminFormContainer"></div>
@@ -829,7 +832,11 @@
                         <span>${data.version}</span>
                     </div>
                     <div class="admin-info-item">
-                        <span>Network ID:</span>
+                        <span>Networks:</span>
+                        <span>${data.networks_count || 1} configured</span>
+                    </div>
+                    <div class="admin-info-item">
+                        <span>Primary Network:</span>
                         <span>${networkIdDisplay}</span>
                     </div>
                     <div class="admin-info-item">
@@ -958,6 +965,210 @@
                 }
             } catch (error) {
                 showAlert("Failed to update timezone", "error");
+            }
+        }
+        
+        async function showNetworksManager() {
+            try {
+                const response = await fetch("/api/networks");
+                const data = await response.json();
+                const networks = data.networks || [];
+                
+                let networksHtml = `
+                    <div class="form-group">
+                        <label class="form-label">Configured Networks (${networks.length}/6):</label>
+                        <div style="max-height: 300px; overflow-y: auto; border: 1px solid rgba(77,166,255,.3); border-radius: 8px; padding: 10px; margin: 10px 0;">
+                `;
+                
+                if (networks.length === 0) {
+                    networksHtml += '<p style="text-align: center; color: rgba(255,255,255,.6);">No networks configured</p>';
+                } else {
+                    networks.forEach((network, index) => {
+                        const statusColor = network.authenticated ? '#51cf66' : '#ff6b6b';
+                        const statusText = network.authenticated ? 'Authenticated' : 'Not Authenticated';
+                        const activeText = network.active ? 'Active' : 'Inactive';
+                        const activeColor = network.active ? '#4da6ff' : '#868e96';
+                        
+                        networksHtml += `
+                            <div style="background: rgba(0,40,80,.5); padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(77,166,255,.2);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <div>
+                                        <strong style="color: #4da6ff;">${network.name}</strong>
+                                        <div style="font-size: 12px; color: rgba(255,255,255,.7);">ID: ${network.id} | Email: ${network.email}</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="color: ${statusColor}; font-size: 12px;">${statusText}</div>
+                                        <div style="color: ${activeColor}; font-size: 12px;">${activeText}</div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                    ${!network.authenticated ? `<button class="form-btn" style="padding: 4px 8px; font-size: 11px;" onclick="authenticateNetwork('${network.id}')">Authenticate</button>` : ''}
+                                    <button class="form-btn" style="padding: 4px 8px; font-size: 11px; background: ${network.active ? '#868e96' : '#4da6ff'};" onclick="toggleNetwork('${network.id}')">${network.active ? 'Disable' : 'Enable'}</button>
+                                    <button class="form-btn" style="padding: 4px 8px; font-size: 11px; background: #ff6b6b;" onclick="removeNetwork('${network.id}')">Remove</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                networksHtml += `
+                        </div>
+                        ${networks.length < 6 ? `
+                            <button class="form-btn" onclick="showAddNetworkForm()" style="margin-top: 10px;">
+                                <i class="fas fa-plus"></i> Add New Network
+                            </button>
+                        ` : '<p style="color: #ff922b; font-size: 12px; margin-top: 10px;">Maximum 6 networks reached</p>'}
+                    </div>
+                `;
+                
+                document.getElementById("adminFormContainer").innerHTML = networksHtml;
+            } catch (error) {
+                showAlert("Failed to load networks", "error");
+            }
+        }
+        
+        function showAddNetworkForm() {
+            document.getElementById("adminFormContainer").innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">Add New Network:</label>
+                    <input type="text" id="newNetworkId" class="form-input" placeholder="Network ID (numbers only)" style="margin-bottom: 10px;">
+                    <input type="email" id="newNetworkEmail" class="form-input" placeholder="Email for authentication" style="margin-bottom: 10px;">
+                    <input type="text" id="newNetworkName" class="form-input" placeholder="Network name (optional)" style="margin-bottom: 10px;">
+                    <div style="display: flex; gap: 10px;">
+                        <button class="form-btn" onclick="addNetwork()">Add Network</button>
+                        <button class="form-btn" style="background: #868e96;" onclick="showNetworksManager()">Cancel</button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        async function addNetwork() {
+            const networkId = document.getElementById("newNetworkId").value.trim();
+            const email = document.getElementById("newNetworkEmail").value.trim();
+            const name = document.getElementById("newNetworkName").value.trim() || `Network ${networkId}`;
+            
+            if (!networkId || !networkId.match(/^\d+$/)) {
+                showAlert("Invalid network ID", "error");
+                return;
+            }
+            
+            if (!email || !email.includes("@")) {
+                showAlert("Invalid email address", "error");
+                return;
+            }
+            
+            try {
+                const response = await fetch("/api/admin/networks", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ network_id: networkId, email: email, name: name })
+                });
+                
+                const data = await response.json();
+                showAlert(data.message, data.success ? "success" : "error");
+                
+                if (data.success) {
+                    setTimeout(() => showNetworksManager(), 1000);
+                }
+            } catch (error) {
+                showAlert("Failed to add network", "error");
+            }
+        }
+        
+        async function removeNetwork(networkId) {
+            if (!confirm(`Are you sure you want to remove network ${networkId}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/admin/networks/${networkId}`, {
+                    method: "DELETE"
+                });
+                
+                const data = await response.json();
+                showAlert(data.message, data.success ? "success" : "error");
+                
+                if (data.success) {
+                    setTimeout(() => showNetworksManager(), 1000);
+                }
+            } catch (error) {
+                showAlert("Failed to remove network", "error");
+            }
+        }
+        
+        async function toggleNetwork(networkId) {
+            try {
+                const response = await fetch(`/api/admin/networks/${networkId}/toggle`, {
+                    method: "POST"
+                });
+                
+                const data = await response.json();
+                showAlert(data.message, data.success ? "success" : "error");
+                
+                if (data.success) {
+                    setTimeout(() => showNetworksManager(), 1000);
+                }
+            } catch (error) {
+                showAlert("Failed to toggle network", "error");
+            }
+        }
+        
+        async function authenticateNetwork(networkId) {
+            try {
+                // Send authentication code
+                const response = await fetch(`/api/admin/networks/${networkId}/auth`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ step: "send" })
+                });
+                
+                const data = await response.json();
+                showAlert(data.message, data.success ? "success" : "error");
+                
+                if (data.success) {
+                    // Show verification form
+                    document.getElementById("adminFormContainer").innerHTML = `
+                        <div class="form-group">
+                            <label class="form-label">Authenticate Network ${networkId}:</label>
+                            <p style="color: rgba(255,255,255,.7); font-size: 12px; margin-bottom: 15px;">
+                                A verification code has been sent to the email address for this network.
+                            </p>
+                            <input type="text" id="authCode" class="form-input" placeholder="Enter verification code" style="margin-bottom: 10px;">
+                            <div style="display: flex; gap: 10px;">
+                                <button class="form-btn" onclick="verifyNetworkAuth('${networkId}')">Verify Code</button>
+                                <button class="form-btn" style="background: #868e96;" onclick="showNetworksManager()">Cancel</button>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                showAlert("Failed to send authentication code", "error");
+            }
+        }
+        
+        async function verifyNetworkAuth(networkId) {
+            const code = document.getElementById("authCode").value.trim();
+            
+            if (!code) {
+                showAlert("Verification code required", "error");
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/admin/networks/${networkId}/auth`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ step: "verify", code: code })
+                });
+                
+                const data = await response.json();
+                showAlert(data.message, data.success ? "success" : "error");
+                
+                if (data.success) {
+                    setTimeout(() => showNetworksManager(), 1000);
+                }
+            } catch (error) {
+                showAlert("Failed to verify code", "error");
             }
         }
         
