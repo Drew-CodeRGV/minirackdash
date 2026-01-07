@@ -1,17 +1,17 @@
 #!/bin/bash
-# Add Mobile Responsive Design to Dashboard
+# Direct Mobile Responsive Design Update
 
 set -e
 
-echo "📱 Adding mobile responsive design to MiniRack Dashboard..."
+echo "📱 Updating dashboard with mobile responsive design..."
 
 # Stop dashboard
 sudo systemctl stop eero-dashboard
 
-# Download updated files
-echo "📥 Downloading v6.7.3-mobile with responsive design..."
-sudo curl -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
-sudo curl -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
+# Copy files from local repository
+echo "📥 Copying mobile responsive files..."
+sudo cp deploy/dashboard_minimal.py /opt/eero/app/dashboard.py
+sudo cp deploy/index.html /opt/eero/app/index.html
 
 # Set permissions
 sudo chown www-data:www-data /opt/eero/app/dashboard.py /opt/eero/app/index.html
@@ -48,21 +48,14 @@ if sudo systemctl is-active --quiet eero-dashboard; then
         echo "🌐 Dashboard: http://$PUBLIC_IP"
         echo ""
         echo "📱 MOBILE FEATURES ACTIVE:"
-        echo "   ✅ Responsive grid layout (1-2-4 columns based on screen size)"
-        echo "   ✅ Touch-friendly buttons and controls (44px minimum)"
-        echo "   ✅ Optimized typography with clamp() for all screen sizes"
+        echo "   ✅ Responsive grid layout (1-2-4 columns)"
+        echo "   ✅ Touch-friendly controls (44px minimum)"
+        echo "   ✅ Scalable typography with clamp() functions"
         echo "   ✅ Mobile-first design approach"
-        echo "   ✅ Improved modal dialogs for mobile interaction"
-        echo "   ✅ Better spacing and padding for touch devices"
+        echo "   ✅ Optimized modal dialogs"
         echo "   ✅ Touch-optimized π admin button"
         echo ""
-        echo "📊 RESPONSIVE BREAKPOINTS:"
-        echo "   • Mobile: Single column chart layout"
-        echo "   • Tablet: Two column chart layout"
-        echo "   • Desktop: Four column chart layout"
-        echo ""
-        echo "📲 Test on your mobile device for the best experience!"
-        echo "🔧 Use admin panel (π button) to configure networks and settings"
+        echo "📲 Ready for mobile testing!"
     else
         echo "⚠️ Dashboard may not be responding correctly"
         echo "Checking service status..."
@@ -71,9 +64,4 @@ if sudo systemctl is-active --quiet eero-dashboard; then
 else
     echo "❌ Dashboard service failed to start"
     sudo systemctl status eero-dashboard --no-pager -l
-    echo ""
-    echo "🔧 Troubleshooting steps:"
-    echo "   1. Check logs: sudo journalctl -u eero-dashboard -f"
-    echo "   2. Check permissions: ls -la /opt/eero/app/"
-    echo "   3. Manual start: sudo -u www-data /opt/eero/venv/bin/python /opt/eero/app/dashboard.py"
 fi
