@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=3.0">
-    <title>Network Dashboard v6.7.3 (Mobile)</title>
+    <title>Network Dashboard v6.7.4 (Mobile)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -618,8 +618,11 @@
                 justify-content: center;
             }
         }
-    </style> 
-            align-items: center; 
+        
+        /* Legacy CSS for compatibility */
+        .modal-header {
+            display: flex;
+            justify-content: space-between; 
             margin-bottom: 20px; 
             padding-bottom: 15px; 
             border-bottom: 2px solid rgba(77,166,255,.3); 
@@ -836,7 +839,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.7.3-mobile</span> • 
+                <span class="version">v6.7.4-mobile</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>

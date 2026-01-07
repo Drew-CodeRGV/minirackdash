@@ -17,7 +17,7 @@ import logging
 import pytz
 
 # Configuration
-VERSION = "6.7.3-mobile"
+VERSION = "6.7.4-mobile"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
