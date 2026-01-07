@@ -57,8 +57,9 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# Configure Nginx - minimal but effective
-rm -f /etc/nginx/sites-enabled/*
+# Configure Nginx - AGGRESSIVELY prevent default page
+sudo systemctl stop nginx || true
+sudo rm -rf /var/www/html/* /var/www/* /etc/nginx/sites-enabled/* /etc/nginx/sites-available/default* /etc/nginx/conf.d/*
 cat > /etc/nginx/nginx.conf << 'EOF'
 user www-data;
 worker_processes auto;
@@ -75,6 +76,7 @@ http {
     tcp_nodelay on;
     keepalive_timeout 65;
     types_hash_max_size 2048;
+    server_tokens off;
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
     access_log /var/log/nginx/access.log;
@@ -85,6 +87,7 @@ http {
         listen 80 default_server;
         listen [::]:80 default_server;
         server_name _;
+        root /nonexistent;
         
         location / {
             proxy_pass http://127.0.0.1:5000;
@@ -95,6 +98,7 @@ http {
             proxy_connect_timeout 30s;
             proxy_send_timeout 30s;
             proxy_read_timeout 30s;
+            proxy_buffering off;
         }
     }
 }
@@ -121,13 +125,19 @@ systemctl enable nginx
 systemctl restart nginx
 
 # Verify complete setup
-echo "🔍 Testing setup..."
+echo "🔍 Testing setup with anti-default-page verification..."
 for i in {1..10}; do
-    if curl -f http://localhost/ | grep -q "Dashboard" 2>/dev/null; then
-        echo "✅ Setup complete!"
+    RESPONSE=$(curl -s http://localhost/)
+    if echo "$RESPONSE" | grep -q "Dashboard" && ! echo "$RESPONSE" | grep -q "Welcome to nginx"; then
+        echo "✅ Setup complete and verified!"
         break
     fi
-    [ $i -eq 10 ] && { echo "❌ Nginx failed"; exit 1; }
+    if [ $i -eq 10 ]; then
+        echo "❌ Still getting nginx default page"
+        echo "Response: $(echo "$RESPONSE" | head -c 200)"
+        exit 1
+    fi
+    echo "⏳ Test $i: Verifying proper setup..."
     sleep 2
 done
 

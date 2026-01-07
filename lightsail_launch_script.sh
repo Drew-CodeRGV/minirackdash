@@ -59,8 +59,10 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# Configure Nginx - minimal but effective
-rm -f /etc/nginx/sites-enabled/*
+# Configure Nginx - AGGRESSIVELY prevent default page
+echo "🌐 Configuring nginx to ONLY serve dashboard..."
+sudo systemctl stop nginx || true
+sudo rm -rf /var/www/html/* /var/www/* /etc/nginx/sites-enabled/* /etc/nginx/sites-available/default* /etc/nginx/conf.d/*
 cat > /etc/nginx/nginx.conf << 'EOF'
 user www-data;
 worker_processes auto;
@@ -77,16 +79,19 @@ http {
     tcp_nodelay on;
     keepalive_timeout 65;
     types_hash_max_size 2048;
+    server_tokens off;
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
     access_log /var/log/nginx/access.log;
     error_log /var/log/nginx/error.log;
     gzip on;
 
+    # ONLY serve dashboard - no defaults
     server {
         listen 80 default_server;
         listen [::]:80 default_server;
         server_name _;
+        root /nonexistent;
         
         location / {
             proxy_pass http://127.0.0.1:5000;
@@ -97,6 +102,7 @@ http {
             proxy_connect_timeout 30s;
             proxy_send_timeout 30s;
             proxy_read_timeout 30s;
+            proxy_buffering off;
         }
     }
 }
@@ -126,18 +132,21 @@ done
 systemctl enable nginx
 systemctl restart nginx
 
-# Verify complete setup
-echo "🔍 Testing nginx proxy..."
+# Verify complete setup with multiple checks
+echo "🔍 Testing nginx proxy with multiple verification checks..."
 for i in {1..10}; do
-    if curl -f http://localhost/ | grep -q "Dashboard" 2>/dev/null; then
-        echo "✅ Nginx proxy working"
+    RESPONSE=$(curl -s http://localhost/)
+    if echo "$RESPONSE" | grep -q "Dashboard" && ! echo "$RESPONSE" | grep -q "Welcome to nginx"; then
+        echo "✅ Nginx proxy working correctly (test $i)"
         break
     fi
     if [ $i -eq 10 ]; then
-        echo "❌ Nginx proxy failed"
+        echo "❌ Nginx still serving default page after 10 attempts"
+        echo "Response preview: $(echo "$RESPONSE" | head -c 200)"
         systemctl status nginx
         exit 1
     fi
+    echo "⏳ Test $i: Waiting for proper proxy setup..."
     sleep 2
 done
 
