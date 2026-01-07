@@ -14,6 +14,5 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Run the simple dashboard (more reliable for local development)
-echo "🔧 Starting simple local version..."
-python3 dashboard_simple_local.py
+# Run the dashboard
+python3 dashboard_local.py

@@ -4,7 +4,13 @@ Run the complete MiniRack Dashboard locally on your Mac with full mobile respons
 
 ## 🚀 Quick Start
 
-### Option 1: Automatic Setup (Recommended)
+### Option 1: Simple Local Version (Recommended)
+```bash
+# Run the simple local dashboard (no external dependencies)
+python3 dashboard_simple_local.py
+```
+
+### Option 2: Full Local Version
 ```bash
 # Run the setup script
 python3 setup_macos_local.py
@@ -13,7 +19,7 @@ python3 setup_macos_local.py
 ./run_local.sh
 ```
 
-### Option 2: Manual Setup
+### Option 3: Manual Setup
 ```bash
 # Install dependencies
 pip3 install flask==2.3.3 flask-cors==4.0.0 requests==2.31.0 pytz==2023.3
@@ -42,7 +48,7 @@ python3 dashboard_local.py
 2. Click the π button (bottom right)
 3. Click "Manage Networks"
 4. Add your network ID and email
-5. Authenticate with the verification code
+5. Authenticate with the real verification code sent to your email
 
 ## 🔧 Features
 
@@ -50,25 +56,43 @@ python3 dashboard_local.py
 - **Mobile Responsive Design** - Perfect on all screen sizes
 - **Multi-Network Support** - Monitor up to 6 networks
 - **Real-time Device Monitoring** - Wired and wireless devices
-- **Signal Strength Analysis** - RSSI data and charts
+- **Full-Height Network Display** - Per-network info fills entire column
+- **Eero Insight Integration** - Clickable network ID links
+- **CSV Data Export** - Complete network and device statistics
 - **Frequency Distribution** - 2.4GHz, 5GHz, 6GHz breakdown
 - **Device Type Detection** - iOS, Android, Windows, Amazon, etc.
 - **Time Range Selection** - 1h, 4h, 8h, 12h, 24h, week
 - **Per-Network Statistics** - Individual network breakdowns
+- **Production API Integration** - Real Eero API authentication and data
 
 ### 📊 Dashboard Charts
 1. **Connected Devices** - Timeline of device connections
 2. **Device Types** - Pie chart of device OS distribution
 3. **Frequency Distribution** - Wireless frequency usage
-4. **Average Signal Strength** - RSSI over time
+4. **Per-Network Information** - Full-height static display with:
+   - Network authentication status
+   - Device counts (total, wireless, wired)
+   - Device type breakdown by network
+   - Frequency distribution by network
+   - Clickable Eero Insight links
+   - Last update timestamps
+
+### 📥 Data Export
+- **CSV Export Button** - Located in header next to time range selector
+- **Comprehensive Data** - All networks, device counts, frequencies
+- **Timestamped Files** - Automatic filename with export timestamp
+- **Eero Insight Links** - Direct links to network management
 
 ### 🔐 Network Authentication
-- Email-based verification
-- Secure token storage
-- Multiple network support
+- **Real Eero API Authentication** - Production email verification
+- Secure token storage in `~/.minirack/`
+- Multiple network support with individual authentication
 - Individual network enable/disable
 
 ## 🛠️ Troubleshooting
+
+### "Failed to load networks" Error - FIXED ✅
+This issue has been resolved! The local dashboard now includes all necessary network management API endpoints.
 
 ### Dependencies Issues
 ```bash
@@ -80,8 +104,12 @@ python3 --version  # Should be 3.8+
 ```
 
 ### Port Conflicts
-If port 3000 is in use, edit `dashboard_local.py` and change:
-```python
+If port 3000 is in use:
+```bash
+# Kill existing processes
+lsof -ti:3000 | xargs kill -9
+
+# Or edit dashboard_simple_local.py and change the port:
 app.run(host='127.0.0.1', port=3001, debug=True)  # Use port 3001
 ```
 
@@ -89,20 +117,21 @@ app.run(host='127.0.0.1', port=3001, debug=True)  # Use port 3001
 ```bash
 # Reset configuration
 rm -rf ~/.minirack/
-python3 dashboard_local.py  # Will recreate defaults
+python3 dashboard_simple_local.py  # Will recreate defaults
 ```
 
 ### Network Authentication
-1. Make sure your email is correct
-2. Check spam folder for verification codes
-3. Codes expire after a few minutes
-4. Try the authentication process again
+- **Real Eero API**: Email-based verification with production API
+- Check spam folder for verification codes
+- Codes expire after a few minutes
+- Try the authentication process again if needed
 
 ## 📁 File Structure
 
 ```
 minirackdash/
-├── dashboard_local.py          # Local macOS runner
+├── dashboard_simple_local.py   # ⭐ Simple local version (recommended)
+├── dashboard_local.py          # Full local macOS runner
 ├── run_local.sh               # Convenience script
 ├── setup_macos_local.py       # Automatic setup
 ├── deploy/
@@ -121,7 +150,7 @@ minirackdash/
 To update to the latest version:
 ```bash
 git pull origin eeroNetworkDash
-python3 dashboard_local.py  # Restart with new code
+python3 dashboard_simple_local.py  # Restart with new code
 ```
 
 ## 🌐 Deployment vs Local
@@ -133,13 +162,16 @@ python3 dashboard_local.py  # Restart with new code
 | **Service** | Manual start | systemd |
 | **Logs** | ~/.minirack/dashboard.log | /opt/eero/logs/ |
 | **Updates** | git pull | Deployment scripts |
+| **Authentication** | Production API | Production API only |
 
 ## 📞 Support
 
-- **Version**: 6.7.8-mobile-local
+- **Version**: 6.8.0-mobile-local
 - **Features**: All production features included
 - **Mobile**: Fully responsive design
-- **Networks**: Multi-network support
+- **Networks**: Multi-network support with CSV export
 - **Debug**: Console logging and debug endpoints
+- **Fixed**: Network management API endpoints working with real production authentication
+- **New**: Full-height per-network display with Eero Insight links and CSV export
 
 Your local dashboard has the same features as the production AWS version!

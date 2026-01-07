@@ -81,26 +81,6 @@
             flex-wrap: wrap;
         }
         
-        .csv-export-btn {
-            background: rgba(81,207,102,.2);
-            border: 2px solid #51cf66;
-            border-radius: 6px;
-            color: #51cf66;
-            padding: 4px 8px;
-            font-size: clamp(10px, 2.5vw, 12px);
-            cursor: pointer;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            transition: all 0.2s ease;
-        }
-        
-        .csv-export-btn:hover {
-            background: rgba(81,207,102,.3);
-            color: #fff;
-        }
-        
         .time-range-selector select {
             background: rgba(0,40,80,.7);
             border: 2px solid #4da6ff;
@@ -383,11 +363,20 @@
             text-decoration: none;
             font-weight: 500;
             border-bottom: 1px dotted #4da6ff;
+            position: relative;
         }
         
         .network-id-link:hover {
             color: #667eea;
             border-bottom-color: #667eea;
+        }
+        
+        .network-id-hidden {
+            color: rgba(255,255,255,0.5);
+        }
+        
+        .network-id-hidden:hover {
+            color: #4da6ff;
         }
         
         .device-breakdown {
@@ -1143,9 +1132,6 @@
                     <option value="168">Last Week</option>
                 </select>
             </div>
-            <a href="/api/export/csv" class="csv-export-btn" title="Export Network Data to CSV">
-                <i class="fas fa-download"></i><span>CSV</span>
-            </a>
             <div class="status-indicator">
                 <div class="status-dot"></div>
                 <span id="lastUpdate">Loading...</span>
@@ -1173,11 +1159,9 @@
             <div class="chart-container"><canvas id="frequencyChart"></canvas></div>
         </div>
         <div class="chart-card">
-            <div class="chart-title">Per-Network Information</div>
-            <div class="chart-subtitle">Individual network statistics</div>
-            <div id="networkInfoContainer" class="network-info-container">
-                <div id="networkInfoList"></div>
-            </div>
+            <div class="chart-title">Average Signal Strength</div>
+            <div class="chart-subtitle">Wireless devices only (dBm)</div>
+            <div class="chart-container"><canvas id="signalStrengthChart"></canvas></div>
         </div>
     </div>
     
@@ -1200,6 +1184,14 @@
                 <button class="modal-close" onclick="closeModal('devicesModal')">&times;</button>
             </div>
             <div id="devicesList" class="device-grid"></div>
+        </div>
+    </div>
+    
+    <!-- Network Statistics Section -->
+    <div id="networkStatsContainer" style="display: none;">
+        <div class="network-stats">
+            <div class="network-stats-title">Per-Network Statistics</div>
+            <div id="networkStatsList"></div>
         </div>
     </div>
     
@@ -1234,12 +1226,12 @@
     </div>
     
     <script>
-        let charts = {};
         let isConfigured = false;
         let currentTimeRange = 1; // Default to 1 hour
         let chartInitialized = false;
         let dataLoadRetries = 0;
         const MAX_RETRIES = 3;
+        let charts = {};
         
         function changeTimeRange() {
             currentTimeRange = parseInt(document.getElementById('timeRange').value);
@@ -1357,8 +1349,38 @@
                 });
                 
                 // Signal Strength Chart
-                // Network Info Display (replaces signal strength chart)
-                loadNetworkInfoStatic();
+                // Signal Strength Chart
+                const signalStrengthCtx = document.getElementById("signalStrengthChart");
+                if (!signalStrengthCtx) {
+                    console.error("Signal strength chart canvas not found");
+                    return false;
+                }
+                
+                charts.signalStrength = new Chart(signalStrengthCtx.getContext("2d"), {
+                    type: "line",
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: "Avg Signal",
+                            data: [],
+                            borderColor: "#51cf66",
+                            backgroundColor: "rgba(81,207,102,0.1)",
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        ...commonOptions,
+                        scales: {
+                            y: { 
+                                ticks: { color: "#fff" },
+                                min: -100,
+                                max: -30
+                            },
+                            x: { ticks: { color: "#fff" } }
+                        }
+                    }
+                });
                 
                 chartInitialized = true;
                 console.log("Charts initialized successfully");
@@ -1399,96 +1421,87 @@
             }
         }
         
-        async function loadNetworkInfoStatic() {
+        async function loadNetworkStats() {
             try {
                 const response = await fetch("/api/network-stats");
                 const data = await response.json();
-                displayNetworkInfoStatic(data.networks || []);
+                
+                if (data.networks && data.networks.length > 1) {
+                    // Show network stats if multiple networks
+                    document.getElementById("networkStatsContainer").style.display = "block";
+                    displayNetworkStats(data.networks);
+                } else {
+                    // Hide network stats for single network
+                    document.getElementById("networkStatsContainer").style.display = "none";
+                }
             } catch (error) {
-                console.error("Error loading network info:", error);
-                document.getElementById("networkInfoList").innerHTML = '<div style="color: #ff6b6b; text-align: center; padding: 20px;">Error loading network information</div>';
+                console.error("Error loading network stats:", error);
+                document.getElementById("networkStatsContainer").style.display = "none";
             }
         }
         
-        function displayNetworkInfoStatic(networks) {
-            const container = document.getElementById("networkInfoList");
-            
-            if (!networks || networks.length === 0) {
-                container.innerHTML = '<div style="color: rgba(255,255,255,0.7); text-align: center; padding: 20px;">No networks configured</div>';
-                return;
-            }
+        function displayNetworkStats(networks) {
+            const container = document.getElementById("networkStatsList");
             
             container.innerHTML = networks.map(network => {
-                const deviceTypes = Object.entries(network.device_os || {})
-                    .filter(([type, count]) => count > 0)
-                    .map(([type, count]) => `<span class="device-type-badge">${type}: ${count}</span>`)
-                    .join('');
+                const deviceOsEntries = Object.entries(network.device_os || {})
+                    .filter(([key, value]) => value > 0)
+                    .map(([key, value]) => key + ': ' + value)
+                    .join(', ') || 'None';
                 
-                const frequencies = Object.entries(network.frequency_distribution || {})
-                    .filter(([freq, count]) => count > 0)
-                    .map(([freq, count]) => `<span class="device-type-badge">${freq}: ${count}</span>`)
-                    .join('');
+                const frequencyEntries = Object.entries(network.frequency_distribution || {})
+                    .filter(([key, value]) => value > 0);
                 
-                return `
-                    <div class="network-info-item">
-                        <div class="network-info-header">
-                            <div class="network-name-info">${network.name || `Network ${network.id}`}</div>
-                            <div class="network-status ${network.authenticated ? 'authenticated' : 'not-authenticated'}">
-                                ${network.authenticated ? '✓ Connected' : '✗ Not Connected'}
-                            </div>
-                        </div>
-                        <div class="network-details">
-                            <div class="network-detail-item">
-                                <div class="network-detail-label">Network ID</div>
-                                <div class="network-detail-value">
-                                    <a href="https://insight.eero.com/networks/${network.id}" target="_blank" class="network-id-link">${network.id}</a>
-                                </div>
-                            </div>
-                            <div class="network-detail-item">
-                                <div class="network-detail-label">Total Devices</div>
-                                <div class="network-detail-value">${network.total_devices || 0}</div>
-                            </div>
-                            <div class="network-detail-item">
-                                <div class="network-detail-label">Wireless</div>
-                                <div class="network-detail-value">${network.wireless_devices || 0}</div>
-                            </div>
-                            <div class="network-detail-item">
-                                <div class="network-detail-label">Wired</div>
-                                <div class="network-detail-value">${network.wired_devices || 0}</div>
-                            </div>
-                            ${network.api_name ? `
-                            <div class="network-detail-item">
-                                <div class="network-detail-label">API Name</div>
-                                <div class="network-detail-value">${network.api_name}</div>
-                            </div>
-                            ` : ''}
-                        </div>
-                        ${deviceTypes ? `
-                        <div class="network-detail-item" style="margin-top: 8px;">
-                            <div class="network-detail-label">Device Types</div>
-                            <div class="device-breakdown">${deviceTypes}</div>
-                        </div>
-                        ` : ''}
-                        ${frequencies ? `
-                        <div class="network-detail-item" style="margin-top: 8px;">
-                            <div class="network-detail-label">Frequencies</div>
-                            <div class="device-breakdown">${frequencies}</div>
-                        </div>
-                        ` : ''}
-                        ${network.last_successful_update ? `
-                        <div class="network-detail-item" style="margin-top: 8px;">
-                            <div class="network-detail-label">Last Update</div>
-                            <div class="network-detail-value">${new Date(network.last_successful_update).toLocaleString()}</div>
-                        </div>
-                        ` : ''}
-                    </div>
-                `;
+                const frequencyHtml = frequencyEntries.length > 0 
+                    ? frequencyEntries.map(([freq, count]) => 
+                        '<div class="frequency-item">' +
+                            '<span class="frequency-label">' + freq + ':</span>' +
+                            '<span class="frequency-count">' + count + ' devices</span>' +
+                        '</div>'
+                    ).join('')
+                    : '<div class="frequency-item"><span class="frequency-label">No wireless devices</span></div>';
+                
+                const lastUpdate = network.last_successful_update 
+                    ? new Date(network.last_successful_update).toLocaleTimeString()
+                    : 'Never';
+                
+                return '<div class="network-item">' +
+                        '<div class="network-header">' +
+                            '<div class="network-name">' + (network.api_name || network.name) + '</div>' +
+                            '<div class="network-id">ID: <a href="https://insight.eero.com/networks/' + network.id + '" target="_blank" style="color: #4da6ff; text-decoration: none;">' + network.id + '</a></div>' +
+                        '</div>' +
+                        '<div class="network-details">' +
+                            '<div class="network-stat">' +
+                                '<span class="network-stat-label">Total Devices:</span>' +
+                                '<span class="network-stat-value">' + (network.total_devices || 0) + '</span>' +
+                            '</div>' +
+                            '<div class="network-stat">' +
+                                '<span class="network-stat-label">Wireless:</span>' +
+                                '<span class="network-stat-value">' + (network.wireless_devices || 0) + '</span>' +
+                            '</div>' +
+                            '<div class="network-stat">' +
+                                '<span class="network-stat-label">Wired:</span>' +
+                                '<span class="network-stat-value">' + (network.wired_devices || 0) + '</span>' +
+                            '</div>' +
+                            '<div class="network-stat">' +
+                                '<span class="network-stat-label">Last Update:</span>' +
+                                '<span class="network-stat-value">' + lastUpdate + '</span>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div class="network-details">' +
+                            '<div class="network-stat" style="grid-column: 1 / -1;">' +
+                                '<span class="network-stat-label">Device Types:</span>' +
+                                '<span class="network-stat-value">' + deviceOsEntries + '</span>' +
+                            '</div>' +
+                        '</div>' +
+                        (frequencyEntries.length > 0 ? 
+                            '<div class="frequency-breakdown">' +
+                                '<div style="font-size: clamp(10px, 2.5vw, 11px); color: rgba(255,255,255,.7); margin-bottom: 4px;">Frequency Distribution:</div>' +
+                                frequencyHtml +
+                            '</div>'
+                        : '') +
+                    '</div>';
             }).join('');
-        }
-        
-        function updateNetworkInfoDisplay() {
-            // Refresh the network info display
-            loadNetworkInfoStatic();
         }
         
 
@@ -1589,6 +1602,10 @@
                     document.getElementById("lastUpdate").style.color = "#ff922b";
                 } else {
                     document.getElementById("lastUpdate").style.color = "#fff";
+                    const updateTime = data.last_successful_update || data.last_update;
+                    if (updateTime) {
+                        document.getElementById("lastUpdate").textContent = new Date(updateTime).toLocaleTimeString();
+                    }
                 }
                 
                 // Apply client-side time filtering
@@ -1652,10 +1669,27 @@
                 }
                 
                 try {
-                    // Update Network Info Display (replaces signal strength chart)
-                    updateNetworkInfoDisplay();
+                    // Update Signal Strength Chart
+                    if (charts.signalStrength && filteredData.signal_strength_avg) {
+                        console.log("Signal strength data:", filteredData.signal_strength_avg);
+                        
+                        if (filteredData.signal_strength_avg.length > 0) {
+                            const labels = filteredData.signal_strength_avg.map(entry => 
+                                new Date(entry.timestamp).toLocaleTimeString()
+                            );
+                            const data = filteredData.signal_strength_avg.map(entry => entry.avg_dbm);
+                            console.log("Signal strength chart data:", data);
+                            updateChartData(charts.signalStrength, data, labels);
+                        } else {
+                            console.log("No signal strength data available");
+                            // Clear chart if no data
+                            updateChartData(charts.signalStrength, [], []);
+                        }
+                    } else {
+                        console.log("Signal strength chart not available or no data");
+                    }
                 } catch (error) {
-                    console.error("Error updating network info display:", error);
+                    console.error("Error updating signal strength chart:", error);
                 }
                 
                 // Update last update time
@@ -1677,8 +1711,8 @@
                 
                 updateTextContent("lastUpdate", updateText);
                 
-                // Update network information display
-                updateNetworkInfoDisplay();
+                // Load network statistics for multi-network setups
+                await loadNetworkStats();
                 
                 // Debug signal data (can be removed later)
                 if (Math.random() < 0.1) { // Only 10% of the time to avoid spam
@@ -1986,6 +2020,7 @@
                                     ${!network.authenticated ? `<button class="form-btn" style="padding: 4px 8px; font-size: 11px;" onclick="authenticateNetwork('${network.id}')">Authenticate with Email</button>` : ''}
                                     <button class="form-btn" style="padding: 4px 8px; font-size: 11px; background: ${network.active ? '#868e96' : '#4da6ff'};" onclick="toggleNetwork('${network.id}')">${network.active ? 'Disable' : 'Enable'}</button>
                                     <button class="form-btn" style="padding: 4px 8px; font-size: 11px; background: #ff6b6b;" onclick="removeNetwork('${network.id}')">Remove</button>
+                                    <button class="form-btn" style="padding: 4px 8px; font-size: 11px; background: #ff6b6b;" onclick="removeNetwork('${network.id}')">Remove</button>
                                 </div>
                             </div>
                         `;
@@ -2023,7 +2058,50 @@
             `;
         }
         
-        async function addNetwork() {
+        function editNetworkName(networkId, currentName) {
+            document.getElementById("adminFormContainer").innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">Edit Network Name:</label>
+                    <div style="margin-bottom: 10px; padding: 10px; background: rgba(0,40,80,.5); border-radius: 8px;">
+                        <strong>Network ID:</strong> ${networkId}
+                    </div>
+                    <input type="text" id="editNetworkName" class="form-input" placeholder="Network name" value="${currentName}" style="margin-bottom: 10px;">
+                    <div style="display: flex; gap: 10px;">
+                        <button class="form-btn" onclick="updateNetworkName('${networkId}')">Update Name</button>
+                        <button class="form-btn" style="background: #868e96;" onclick="showNetworksManager()">Cancel</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById("editNetworkName").focus();
+        }
+        
+        async function updateNetworkName(networkId) {
+            const newName = document.getElementById("editNetworkName").value.trim();
+            
+            if (!newName) {
+                showAlert("Network name cannot be empty", "error");
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/admin/networks/${networkId}/name`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(result.message, "success");
+                    showNetworksManager(); // Refresh the networks list
+                } else {
+                    showAlert(result.message, "error");
+                }
+            } catch (error) {
+                showAlert("Failed to update network name", "error");
+            }
+        }
             const networkId = document.getElementById("newNetworkId").value.trim();
             const email = document.getElementById("newNetworkEmail").value.trim();
             const name = document.getElementById("newNetworkName").value.trim() || `Network ${networkId}`;
@@ -2120,7 +2198,6 @@
             }
             
             try {
-                // Send authentication code with email
                 const response = await fetch(`/api/admin/networks/${networkId}/auth`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -2159,7 +2236,6 @@
                 return;
             }
             
-            try {
                 const response = await fetch(`/api/admin/networks/${networkId}/auth`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },

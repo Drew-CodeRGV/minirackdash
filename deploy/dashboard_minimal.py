@@ -17,7 +17,7 @@ import logging
 import pytz
 
 # Configuration
-VERSION = "6.7.8-mobile"
+VERSION = "6.8.0-mobile"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
@@ -1307,6 +1307,90 @@ def reauthorize():
     except Exception as e:
         logging.error("Reauthorization error: " + str(e))
         return jsonify({'success': False, 'message': 'Authentication error: ' + str(e)}), 500
+
+@app.route('/api/export/csv')
+def export_csv():
+    """Export network data to CSV"""
+    try:
+        import csv
+        from io import StringIO
+        
+        # Get current network stats
+        config = load_config()
+        networks = config.get('networks', [])
+        
+        # Create CSV content
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Write headers
+        writer.writerow([
+            'Network Name', 'Network ID', 'API Name', 'Authenticated', 
+            'Total Devices', 'Wireless Devices', 'Wired Devices',
+            'iOS Devices', 'Android Devices', 'Windows Devices', 'Amazon Devices',
+            'Gaming Devices', 'Streaming Devices', 'Other Devices',
+            '2.4GHz Devices', '5GHz Devices', '6GHz Devices',
+            'Last Update', 'Insight Link'
+        ])
+        
+        # Write network data
+        for network in networks:
+            network_id = network.get('id')
+            network_cache = data_cache.get('networks', {}).get(network_id, {})
+            device_os = network_cache.get('device_os', {})
+            freq_dist = network_cache.get('frequency_distribution', {})
+            
+            # Get API name if authenticated
+            api_name = ''
+            if network_id in eero_api.network_tokens:
+                try:
+                    network_info = eero_api.get_network_info(network_id)
+                    api_name = network_info.get('name', '')
+                except:
+                    pass
+            
+            writer.writerow([
+                network.get('name', f'Network {network_id}'),
+                network_id,
+                api_name,
+                'Yes' if network_id in eero_api.network_tokens else 'No',
+                network_cache.get('total_devices', 0),
+                network_cache.get('wireless_devices', 0),
+                network_cache.get('wired_devices', 0),
+                device_os.get('iOS', 0),
+                device_os.get('Android', 0),
+                device_os.get('Windows', 0),
+                device_os.get('Amazon', 0),
+                device_os.get('Gaming', 0),
+                device_os.get('Streaming', 0),
+                device_os.get('Other', 0),
+                freq_dist.get('2.4GHz', 0),
+                freq_dist.get('5GHz', 0),
+                freq_dist.get('6GHz', 0),
+                network_cache.get('last_successful_update', ''),
+                f'https://insight.eero.com/networks/{network_id}'
+            ])
+        
+        # Prepare response
+        csv_content = output.getvalue()
+        output.close()
+        
+        # Generate filename with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'eero_network_export_{timestamp}.csv'
+        
+        # Return CSV file
+        from flask import Response
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+        
+    except Exception as e:
+        logging.error(f"CSV export error: {str(e)}")
+        return jsonify({'error': 'Failed to generate CSV export'}), 500
 
 if __name__ == '__main__':
     logging.info("Starting MiniRack Dashboard " + VERSION)

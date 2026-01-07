@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
 """
 MiniRack Dashboard - macOS Local Version
-Runs the full dashboard locally on macOS with local configuration
 """
 import os
 import sys
 import json
+import requests
+import threading
+import time
+import subprocess
+from datetime import datetime, timedelta
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
 from pathlib import Path
 import logging
+import pytz
 
-# Configuration for local development
+# Configuration
 VERSION = "6.7.8-mobile-local"
 LOCAL_DIR = Path.home() / ".minirack"
 CONFIG_FILE = LOCAL_DIR / "config.json"
+TOKEN_FILE = LOCAL_DIR / ".eero_token"
 TEMPLATE_FILE = Path(__file__).parent / "deploy" / "index.html"
 DATA_CACHE_FILE = LOCAL_DIR / "data_cache.json"
 
 # Ensure local directory exists
 LOCAL_DIR.mkdir(exist_ok=True)
 
-# Setup logging for local development BEFORE importing the main module
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -29,62 +37,65 @@ logging.basicConfig(
     ]
 )
 
-# Override the production logging configuration by patching the logging module
-# This prevents the main dashboard from trying to create /opt/eero/logs/dashboard.log
-original_basicConfig = logging.basicConfig
-def patched_basicConfig(*args, **kwargs):
-    # Ignore any basicConfig calls from the main dashboard module
-    pass
-logging.basicConfig = patched_basicConfig
+# Flask app
+app = Flask(__name__)
+CORS(app)
 
-# Now import and patch the dashboard module
-sys.path.insert(0, str(Path(__file__).parent / "deploy"))
-import dashboard_minimal
+def load_config():
+    """Load configuration"""
+    try:
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                # Migrate old single network config to new multi-network format
+                if 'network_id' in config and 'networks' not in config:
+                    config['networks'] = [{
+                        'id': config.get('network_id', '20478317'),
+                        'name': 'Primary Network',
+                        'email': '',
+                        'token': '',
+                        'active': True
+                    }]
+                return config
+    except Exception as e:
+        logging.error("Config load error: " + str(e))
+    
+    return {
+        "networks": [{
+            "id": "20478317",
+            "name": "Primary Network", 
+            "email": "",
+            "token": "",
+            "active": True
+        }],
+        "environment": "development",
+        "api_url": "api-user.e2ro.com",
+        "timezone": "America/New_York"
+    }
 
-# Restore original basicConfig after import
-logging.basicConfig = original_basicConfig
-
-# Patch the configuration file paths for local development
-dashboard_minimal.VERSION = VERSION
-dashboard_minimal.CONFIG_FILE = str(CONFIG_FILE)
-dashboard_minimal.TOKEN_FILE = str(LOCAL_DIR / ".eero_token")
-dashboard_minimal.TEMPLATE_FILE = str(TEMPLATE_FILE)
-dashboard_minimal.DATA_CACHE_FILE = str(DATA_CACHE_FILE)
-
-# Import the Flask app and functions
-from dashboard_minimal import app, update_cache
-
-def create_default_config():
-    """Create default configuration if it doesn't exist"""
-    if not CONFIG_FILE.exists():
-        config = {
-            "networks": [{
-                "id": "20478317",
-                "name": "Primary Network",
-                "email": "",
-                "token": "",
-                "active": True
-            }],
-            "environment": "development",
-            "api_url": "api-user.e2ro.com",
-            "timezone": "America/New_York"
-        }
-        
+def save_config(config):
+    """Save configuration"""
+    try:
         with open(CONFIG_FILE, 'w') as f:
             json.dump(config, f, indent=2)
-        
-        print(f"✅ Created default config: {CONFIG_FILE}")
+        return True
+    except Exception as e:
+        logging.error("Config save error: " + str(e))
+        return False
 
+# Import the rest of the dashboard code from the deploy version
+sys.path.insert(0, str(Path(__file__).parent / "deploy"))
+
+# Load the main dashboard functions
+exec(open(Path(__file__).parent / "deploy" / "dashboard_minimal.py").read())
+
+# Override the main execution for local development
 if __name__ == '__main__':
     print(f"🚀 Starting MiniRack Dashboard {VERSION} (Local macOS)")
     print(f"📁 Config directory: {LOCAL_DIR}")
-    print(f"🌐 Dashboard: http://localhost:3000")
+    print(f"🌐 Dashboard will be available at: http://localhost:3000")
     print("📱 Mobile responsive design enabled")
     print("🔧 Press Ctrl+C to stop")
-    print("")
-    
-    # Create default config if needed
-    create_default_config()
     
     # Initial cache update
     try:
@@ -93,5 +104,4 @@ if __name__ == '__main__':
     except Exception as e:
         logging.warning("Initial cache update failed: " + str(e))
     
-    # Run the Flask app
     app.run(host='127.0.0.1', port=3000, debug=True)
