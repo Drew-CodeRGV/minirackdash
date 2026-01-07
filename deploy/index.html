@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=3.0">
-    <title>Network Dashboard v6.7.5 (Mobile)</title>
+    <title>Network Dashboard v6.7.6 (Mobile)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -176,6 +176,8 @@
             min-height: 280px;
             max-height: 400px;
             align-items: stretch;
+            position: relative;
+            overflow: hidden;
         }
         
         .chart-title { 
@@ -212,6 +214,16 @@
             max-height: 100% !important; 
             width: auto !important; 
             height: auto !important; 
+            position: static !important;
+        }
+        
+        /* Disable all animations and transitions on charts */
+        .chart-container *, 
+        .chart-container canvas,
+        .chart-card * {
+            animation: none !important;
+            transition: none !important;
+            transform: none !important;
         }
         
         /* Network statistics display */
@@ -962,7 +974,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.7.5-mobile</span> • 
+                <span class="version">v6.7.6-mobile</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -1093,6 +1105,14 @@
                 const commonOptions = {
                     maintainAspectRatio: false,
                     responsive: true,
+                    animation: false, // Disable all animations
+                    transitions: {
+                        active: {
+                            animation: {
+                                duration: 0
+                            }
+                        }
+                    },
                     plugins: {
                         legend: {
                             labels: {
@@ -1328,6 +1348,28 @@
             }).join('');
         }
         
+        function updateChartData(chart, newData, newLabels = null) {
+            if (!chart || !chart.data) return;
+            
+            try {
+                // Update data without triggering animations
+                if (newLabels) {
+                    chart.data.labels = newLabels;
+                }
+                
+                if (Array.isArray(newData)) {
+                    chart.data.datasets[0].data = newData;
+                } else if (newData && chart.data.datasets[0]) {
+                    chart.data.datasets[0].data = newData;
+                }
+                
+                // Update without any animation
+                chart.update('none');
+            } catch (error) {
+                console.error("Chart update error:", error);
+            }
+        }
+        
         async function updateDashboardData() {
             try {
                 // Ensure charts are initialized before updating data
@@ -1384,11 +1426,11 @@
                 try {
                     // Update Connected Users Chart
                     if (charts.users && filteredData.connected_users) {
-                        charts.users.data.labels = filteredData.connected_users.map(entry => 
+                        const labels = filteredData.connected_users.map(entry => 
                             new Date(entry.timestamp).toLocaleTimeString()
                         );
-                        charts.users.data.datasets[0].data = filteredData.connected_users.map(entry => Math.round(entry.count));
-                        charts.users.update('none'); // Use 'none' animation for better performance
+                        const data = filteredData.connected_users.map(entry => Math.round(entry.count));
+                        updateChartData(charts.users, data, labels);
                     }
                 } catch (error) {
                     console.error("Error updating users chart:", error);
@@ -1407,8 +1449,7 @@
                             Math.round(deviceOS.Streaming || 0),
                             Math.round(deviceOS.Other || 0)
                         ];
-                        charts.deviceOS.data.datasets[0].data = deviceCounts;
-                        charts.deviceOS.update('none');
+                        updateChartData(charts.deviceOS, deviceCounts);
                         
                         const totalDevices = deviceCounts.reduce((a, b) => a + b, 0);
                         const wirelessCount = data.wireless_devices || 0;
@@ -1429,8 +1470,7 @@
                             Math.round(freqDist["5GHz"] || 0),
                             Math.round(freqDist["6GHz"] || 0)
                         ];
-                        charts.frequency.data.datasets[0].data = freqCounts;
-                        charts.frequency.update('none');
+                        updateChartData(charts.frequency, freqCounts);
                         
                         const totalFreqDevices = freqCounts.reduce((a, b) => a + b, 0);
                         document.getElementById("frequencySubtitle").textContent = `${totalFreqDevices} wireless devices`;
@@ -1442,11 +1482,11 @@
                 try {
                     // Update Signal Strength Chart
                     if (charts.signalStrength && filteredData.signal_strength_avg) {
-                        charts.signalStrength.data.labels = filteredData.signal_strength_avg.map(entry => 
+                        const labels = filteredData.signal_strength_avg.map(entry => 
                             new Date(entry.timestamp).toLocaleTimeString()
                         );
-                        charts.signalStrength.data.datasets[0].data = filteredData.signal_strength_avg.map(entry => entry.avg_dbm);
-                        charts.signalStrength.update('none');
+                        const data = filteredData.signal_strength_avg.map(entry => entry.avg_dbm);
+                        updateChartData(charts.signalStrength, data, labels);
                     }
                 } catch (error) {
                     console.error("Error updating signal strength chart:", error);

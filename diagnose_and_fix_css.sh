@@ -55,7 +55,7 @@ if [ "$CSS_ISSUE" = true ]; then
     sudo cp /opt/eero/app/dashboard.py /opt/eero/app/dashboard.py.backup.$(date +%s) 2>/dev/null || true
     
     # Download fixed files with force
-    echo "📥 Downloading v6.7.5-mobile with improved alignment and network stats..."
+    echo "📥 Downloading v6.7.6-mobile with animation fixes..."
     sudo curl -f -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
     sudo curl -f -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
     
@@ -66,7 +66,7 @@ if [ "$CSS_ISSUE" = true ]; then
     
     # Verify files were downloaded correctly
     echo "🔍 Verifying downloaded files..."
-    if grep -q "6.7.5" /opt/eero/app/index.html && grep -q "6.7.5" /opt/eero/app/dashboard.py; then
+    if grep -q "6.7.6" /opt/eero/app/index.html && grep -q "6.7.6" /opt/eero/app/dashboard.py; then
         echo "✅ Files downloaded successfully"
     else
         echo "❌ File download may have failed"
@@ -85,8 +85,8 @@ if [ "$CSS_ISSUE" = true ]; then
     # Test the fix
     echo "🧪 Testing CSS fix..."
     for i in {1..10}; do
-        if curl -s http://localhost:5000/ 2>/dev/null | grep -q "6.7.5"; then
-            echo "✅ Dashboard is responding with v6.7.5"
+        if curl -s http://localhost:5000/ 2>/dev/null | grep -q "6.7.6"; then
+            echo "✅ Dashboard is responding with v6.7.6"
             break
         else
             echo "⏳ Waiting for dashboard to start... ($i/10)"

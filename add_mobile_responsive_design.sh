@@ -9,7 +9,7 @@ echo "📱 Adding mobile responsive design to MiniRack Dashboard..."
 sudo systemctl stop eero-dashboard
 
 # Download updated files
-echo "📥 Downloading v6.7.5-mobile with improved alignment and network stats..."
+echo "📥 Downloading v6.7.6-mobile with animation fixes..."
 sudo curl -o /opt/eero/app/dashboard.py https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/dashboard_minimal.py
 sudo curl -o /opt/eero/app/index.html https://raw.githubusercontent.com/Drew-CodeRGV/minirackdash/eeroNetworkDash/deploy/index.html
 
@@ -36,8 +36,8 @@ if sudo systemctl is-active --quiet eero-dashboard; then
     echo "✅ Dashboard service is running"
     
     # Test HTTP response
-    if curl -s http://localhost:5000/ | grep -q "6.7.5" 2>/dev/null; then
-        echo "✅ Version 6.7.5-mobile is live with improved alignment and network stats"
+    if curl -s http://localhost:5000/ | grep -q "6.7.6" 2>/dev/null; then
+        echo "✅ Version 6.7.6-mobile is live with animation fixes"
         
         # Restart nginx
         sudo systemctl restart nginx
@@ -55,6 +55,15 @@ if sudo systemctl is-active --quiet eero-dashboard; then
         echo "   ✅ Improved modal dialogs for mobile interaction"
         echo "   ✅ Better spacing and padding for touch devices"
         echo "   ✅ Touch-optimized π admin button"
+        echo "   ✅ No weird sliding animations - charts update smoothly"
+        echo "   ✅ Static chart updates with no visual glitches"
+        echo ""
+        echo "📊 ANIMATION FIXES:"
+        echo "   • Disabled all chart animations"
+        echo "   • Smooth, instant chart updates"
+        echo "   • No sliding or moving effects"
+        echo ""
+        echo "📲 Test on mobile device to verify smooth operation"
         echo ""
         echo "📊 RESPONSIVE BREAKPOINTS:"
         echo "   • Mobile: Single column chart layout"

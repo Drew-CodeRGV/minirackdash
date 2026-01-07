@@ -12,7 +12,7 @@ if sudo systemctl is-active --quiet eero-dashboard 2>/dev/null; then
     if [ ! -z "$VERSION" ]; then
         echo "📊 Current version: $VERSION"
         
-        if [[ "$VERSION" == *"6.7.5"* ]]; then
+        if [[ "$VERSION" == *"6.7.6"* ]]; then
             echo "✅ Mobile responsive version detected"
         else
             echo "⚠️ Older version detected - mobile features may not be available"
