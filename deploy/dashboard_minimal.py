@@ -17,7 +17,7 @@ import logging
 import pytz
 
 # Configuration
-VERSION = "6.7.7-mobile"
+VERSION = "6.7.8-mobile"
 CONFIG_FILE = "/opt/eero/app/config.json"
 TOKEN_FILE = "/opt/eero/app/.eero_token"
 TEMPLATE_FILE = "/opt/eero/app/index.html"
@@ -461,17 +461,30 @@ def update_cache():
                         network_freq_counts[freq_band] += 1
                         combined_freq_counts[freq_band] += 1
                     
-                    # Signal Strength
+                    # Signal Strength - Enhanced debugging and collection
                     signal_dbm = interface_info.get('signal_dbm', 'N/A')
+                    logging.debug(f"Device {device.get('nickname', 'Unknown')}: signal_dbm = {signal_dbm}, interface_info = {interface_info}")
+                    
                     signal_percent = convert_signal_dbm_to_percent(signal_dbm)
                     signal_quality = get_signal_quality(signal_dbm)
                     
-                    if signal_dbm != 'N/A':
+                    if signal_dbm != 'N/A' and signal_dbm is not None:
                         try:
-                            signal_val = float(str(signal_dbm).replace(' dBm', '').strip())
-                            network_signal_values.append(signal_val)
-                            combined_signal_values.append(signal_val)
-                        except:
+                            # Handle different signal_dbm formats
+                            if isinstance(signal_dbm, (int, float)):
+                                signal_val = float(signal_dbm)
+                            else:
+                                signal_val = float(str(signal_dbm).replace(' dBm', '').replace('dBm', '').strip())
+                            
+                            # Only add valid signal values (typical range -100 to -30 dBm)
+                            if -100 <= signal_val <= -10:
+                                network_signal_values.append(signal_val)
+                                combined_signal_values.append(signal_val)
+                                logging.debug(f"Added signal value: {signal_val} dBm")
+                            else:
+                                logging.warning(f"Signal value out of range: {signal_val} dBm")
+                        except (ValueError, TypeError) as e:
+                            logging.warning(f"Could not parse signal_dbm '{signal_dbm}': {e}")
                             pass
                 else:
                     freq_display = 'Wired'
@@ -511,10 +524,13 @@ def update_cache():
             network_signal_strength_avg = network_cache.get('signal_strength_avg', [])
             if network_signal_values:
                 avg_signal = sum(network_signal_values) / len(network_signal_values)
+                logging.info(f"Network {network_id}: {len(network_signal_values)} wireless devices, avg signal: {avg_signal:.1f} dBm")
                 network_signal_strength_avg.append({
                     'timestamp': current_time.isoformat(),
                     'avg_dbm': round(avg_signal, 1)
                 })
+            else:
+                logging.info(f"Network {network_id}: No wireless devices with valid signal data")
             if len(network_signal_strength_avg) > 168:
                 network_signal_strength_avg = network_signal_strength_avg[-168:]
             
@@ -545,10 +561,13 @@ def update_cache():
         combined_signal_strength_avg = data_cache['combined'].get('signal_strength_avg', [])
         if combined_signal_values:
             avg_signal = sum(combined_signal_values) / len(combined_signal_values)
+            logging.info(f"Combined: {len(combined_signal_values)} total wireless devices, avg signal: {avg_signal:.1f} dBm")
             combined_signal_strength_avg.append({
                 'timestamp': current_time.isoformat(),
                 'avg_dbm': round(avg_signal, 1)
             })
+        else:
+            logging.info("Combined: No wireless devices with valid signal data across all networks")
         if len(combined_signal_strength_avg) > 168:
             combined_signal_strength_avg = combined_signal_strength_avg[-168:]
         
@@ -749,6 +768,29 @@ def get_network_stats():
     except Exception as e:
         logging.error(f"Network stats error: {str(e)}")
         return jsonify({'networks': [], 'total_networks': 0, 'combined_stats': {}}), 500
+
+@app.route('/api/debug/signal')
+def debug_signal():
+    """Debug endpoint for signal strength data"""
+    try:
+        debug_info = {
+            'combined_signal_data': data_cache['combined'].get('signal_strength_avg', []),
+            'combined_signal_count': len(data_cache['combined'].get('signal_strength_avg', [])),
+            'networks': {}
+        }
+        
+        # Add per-network signal data
+        for network_id, network_data in data_cache.get('networks', {}).items():
+            debug_info['networks'][network_id] = {
+                'signal_data': network_data.get('signal_strength_avg', []),
+                'signal_count': len(network_data.get('signal_strength_avg', [])),
+                'wireless_devices': network_data.get('wireless_devices', 0),
+                'last_update': network_data.get('last_update')
+            }
+        
+        return jsonify(debug_info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/devices')
 def get_devices():

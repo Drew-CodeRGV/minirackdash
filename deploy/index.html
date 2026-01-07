@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, maximum-scale=3.0">
-    <title>Network Dashboard v6.7.7 (Mobile)</title>
+    <title>Network Dashboard v6.7.8 (Mobile)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -1007,7 +1007,7 @@
         <div class="header-title">
             <div class="network-name" id="networkName">Network Event Dashboard</div>
             <div class="header-subtitle">
-                <span class="version">v6.7.7-mobile</span> • 
+                <span class="version">v6.7.8-mobile</span> • 
                 <span class="email">drlentz@eero.com</span>
             </div>
         </div>
@@ -1280,6 +1280,18 @@
             }
         }
         
+        async function debugSignalData() {
+            try {
+                const response = await fetch("/api/debug/signal");
+                const data = await response.json();
+                console.log("Signal debug data:", data);
+                return data;
+            } catch (error) {
+                console.error("Error fetching signal debug data:", error);
+                return null;
+            }
+        }
+        
         async function loadNetworkName() {
             try {
                 const response = await fetch("/api/network");
@@ -1542,11 +1554,22 @@
                 try {
                     // Update Signal Strength Chart
                     if (charts.signalStrength && filteredData.signal_strength_avg) {
-                        const labels = filteredData.signal_strength_avg.map(entry => 
-                            new Date(entry.timestamp).toLocaleTimeString()
-                        );
-                        const data = filteredData.signal_strength_avg.map(entry => entry.avg_dbm);
-                        updateChartData(charts.signalStrength, data, labels);
+                        console.log("Signal strength data:", filteredData.signal_strength_avg);
+                        
+                        if (filteredData.signal_strength_avg.length > 0) {
+                            const labels = filteredData.signal_strength_avg.map(entry => 
+                                new Date(entry.timestamp).toLocaleTimeString()
+                            );
+                            const data = filteredData.signal_strength_avg.map(entry => entry.avg_dbm);
+                            console.log("Signal strength chart data:", data);
+                            updateChartData(charts.signalStrength, data, labels);
+                        } else {
+                            console.log("No signal strength data available");
+                            // Clear chart if no data
+                            updateChartData(charts.signalStrength, [], []);
+                        }
+                    } else {
+                        console.log("Signal strength chart not available or no data");
                     }
                 } catch (error) {
                     console.error("Error updating signal strength chart:", error);
@@ -1573,6 +1596,11 @@
                 
                 // Load network statistics for multi-network setups
                 await loadNetworkStats();
+                
+                // Debug signal data (can be removed later)
+                if (Math.random() < 0.1) { // Only 10% of the time to avoid spam
+                    await debugSignalData();
+                }
                     
             } catch (error) {
                 console.error("Dashboard update error:", error);
