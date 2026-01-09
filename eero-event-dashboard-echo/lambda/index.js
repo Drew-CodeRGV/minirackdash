@@ -4,7 +4,8 @@ const axios = require('axios');
 // Pi Dashboard Configuration
 const PI_DASHBOARD_HOST = process.env.PI_DASHBOARD_IP || 'localhost';
 const PI_DASHBOARD_PORT = process.env.PI_DASHBOARD_PORT || '80';
-const PI_BASE_URL = `http://${PI_DASHBOARD_HOST}${PI_DASHBOARD_PORT !== '80' ? ':' + PI_DASHBOARD_PORT : ''}`;
+const PI_USE_HTTPS = process.env.PI_USE_HTTPS === 'true';
+const PI_BASE_URL = `${PI_USE_HTTPS ? 'https' : 'http'}://${PI_DASHBOARD_HOST}${PI_DASHBOARD_PORT !== '80' && PI_DASHBOARD_PORT !== '443' ? ':' + PI_DASHBOARD_PORT : ''}`;
 
 // Response cache to reduce Pi load
 const responseCache = new Map();
