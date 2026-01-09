@@ -1,0 +1,193 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "eero dashboard",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+        {
+          "name": "DeviceCountIntent",
+          "slots": [],
+          "samples": [
+            "how many devices are connected",
+            "how many devices are online",
+            "what's my device count",
+            "tell me about connected devices",
+            "how many things are connected to my network",
+            "device count",
+            "connected devices",
+            "how many devices do I have",
+            "what devices are connected",
+            "show me my devices"
+          ]
+        },
+        {
+          "name": "NetworkStatusIntent",
+          "slots": [],
+          "samples": [
+            "what's my network status",
+            "how is my network",
+            "network status",
+            "is my network working",
+            "how's my internet",
+            "network health",
+            "check my network",
+            "tell me about my network",
+            "network performance",
+            "is everything working"
+          ]
+        },
+        {
+          "name": "RecentEventsIntent",
+          "slots": [
+            {
+              "name": "TimeFrame",
+              "type": "AMAZON.DURATION"
+            }
+          ],
+          "samples": [
+            "what happened recently",
+            "recent network events",
+            "recent activity",
+            "what's been happening on my network",
+            "network events",
+            "recent changes",
+            "what happened in the last {TimeFrame}",
+            "network activity in the last {TimeFrame}",
+            "show me recent events",
+            "any recent network activity"
+          ]
+        },
+        {
+          "name": "DeviceTypesIntent",
+          "slots": [],
+          "samples": [
+            "what types of devices are connected",
+            "device types",
+            "what kinds of devices do I have",
+            "tell me about my device types",
+            "what devices are on my network",
+            "device breakdown",
+            "show me device categories",
+            "what's connected to my network",
+            "device summary"
+          ]
+        },
+        {
+          "name": "APPerformanceIntent",
+          "slots": [],
+          "samples": [
+            "how are my access points",
+            "access point performance",
+            "AP status",
+            "which access point is busiest",
+            "access point info",
+            "how are my APs doing",
+            "access point summary",
+            "tell me about my access points",
+            "AP performance",
+            "which AP has the most devices"
+          ]
+        },
+        {
+          "name": "NewDevicesIntent",
+          "slots": [
+            {
+              "name": "TimeFrame",
+              "type": "AMAZON.DURATION"
+            }
+          ],
+          "samples": [
+            "any new devices",
+            "new devices on my network",
+            "what new devices joined",
+            "recent new connections",
+            "new devices in the last {TimeFrame}",
+            "who joined my network",
+            "new connections",
+            "recent additions to my network"
+          ]
+        },
+        {
+          "name": "InternetSpeedIntent",
+          "slots": [],
+          "samples": [
+            "what's my internet speed",
+            "internet speed",
+            "how fast is my internet",
+            "speed test",
+            "network speed",
+            "bandwidth",
+            "connection speed",
+            "internet performance"
+          ]
+        },
+        {
+          "name": "NetworkSummaryIntent",
+          "slots": [],
+          "samples": [
+            "network summary",
+            "give me a network overview",
+            "tell me everything about my network",
+            "full network status",
+            "complete network report",
+            "network overview",
+            "summarize my network"
+          ]
+        }
+      ],
+      "types": []
+    },
+    "dialog": {
+      "intents": [
+        {
+          "name": "RecentEventsIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "TimeFrame",
+              "type": "AMAZON.DURATION",
+              "confirmationRequired": false,
+              "elicitationRequired": false,
+              "prompts": {}
+            }
+          ]
+        },
+        {
+          "name": "NewDevicesIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "TimeFrame",
+              "type": "AMAZON.DURATION",
+              "confirmationRequired": false,
+              "elicitationRequired": false,
+              "prompts": {}
+            }
+          ]
+        }
+      ]
+    },
+    "prompts": []
+  }
+}

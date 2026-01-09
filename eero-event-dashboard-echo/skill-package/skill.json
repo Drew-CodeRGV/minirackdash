@@ -1,0 +1,61 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "summary": "Voice-enabled Eero network monitoring for Amazon Echo",
+          "examplePhrases": [
+            "Alexa, ask Eero Dashboard how many devices are connected",
+            "Alexa, ask Eero Dashboard about my network status",
+            "Alexa, ask Eero Dashboard about recent network events"
+          ],
+          "keywords": [
+            "eero",
+            "network",
+            "wifi",
+            "monitoring",
+            "devices",
+            "internet",
+            "router",
+            "access point"
+          ],
+          "name": "Eero Dashboard",
+          "description": "Monitor your Eero network with voice commands. Get real-time information about connected devices, network status, access point performance, and recent network events. Perfect for keeping track of your home or office network without needing to check your phone or computer.",
+          "largeIconUri": "https://s3.amazonaws.com/eero-dashboard-assets/large-icon.png",
+          "smallIconUri": "https://s3.amazonaws.com/eero-dashboard-assets/small-icon.png"
+        }
+      },
+      "isAvailableWorldwide": false,
+      "testingInstructions": "To test this skill, you need to have an Eero network set up and configured. Link your Eero account through the Alexa app, then try voice commands like 'how many devices are connected' or 'what's my network status'.",
+      "category": "SMART_HOME",
+      "distributionCountries": ["US", "CA", "GB", "AU"]
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "arn:aws:lambda:us-east-1:123456789012:function:eero-dashboard-skill"
+        },
+        "interfaces": []
+      }
+    },
+    "manifestVersion": "1.0",
+    "permissions": [
+      {
+        "name": "alexa::profile:email:read"
+      }
+    ],
+    "privacyAndCompliance": {
+      "allowsPurchases": false,
+      "usesPersonalInfo": true,
+      "isChildDirected": false,
+      "isExportCompliant": true,
+      "containsAds": false,
+      "locales": {
+        "en-US": {
+          "privacyPolicyUrl": "https://eero-dashboard.com/privacy",
+          "termsOfUseUrl": "https://eero-dashboard.com/terms"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "eero-event-dashboard-echo",
+  "version": "1.0.0",
+  "description": "Voice-enabled Eero network monitoring for Amazon Echo devices using Raspberry Pi as data source",
+  "main": "lambda/index.js",
+  "scripts": {
+    "test": "jest",
+    "dev": "nodemon lambda/index.js",
+    "build": "npm run test && zip -r deployment.zip lambda/ node_modules/",
+    "deploy": "aws lambda update-function-code --function-name eero-dashboard-skill --zip-file fileb://deployment.zip",
+    "simulate": "ask simulate --text",
+    "lint": "eslint lambda/ --fix"
+  },
+  "keywords": [
+    "alexa",
+    "eero",
+    "network",
+    "monitoring",
+    "voice",
+    "echo",
+    "smart-home",
+    "raspberry-pi"
+  ],
+  "author": "Drew Lentz <drew@codergv.org>",
+  "license": "MIT",
+  "dependencies": {
+    "ask-sdk-core": "^2.13.0",
+    "ask-sdk-model": "^1.29.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "eslint": "^8.52.0",
+    "ask-cli": "^2.30.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Drew-CodeRGV/eero-event-dashboard-echo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Drew-CodeRGV/eero-event-dashboard-echo/issues"
+  },
+  "homepage": "https://github.com/Drew-CodeRGV/eero-event-dashboard-echo#readme"
+}

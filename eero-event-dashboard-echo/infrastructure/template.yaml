@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'Eero Event Dashboard for Echo - Simplified infrastructure using Raspberry Pi as data source'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Environment name
+  
+  AlexaSkillId:
+    Type: String
+    Description: 'Alexa Skill ID (will be provided after skill creation)'
+    Default: 'amzn1.ask.skill.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs18.x
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+
+Resources:
+  # Lambda Function for Alexa Skill
+  EeroDashboardSkillFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'eero-dashboard-skill-${Environment}'
+      CodeUri: ../lambda/
+      Handler: index.handler
+      Description: 'Alexa skill handler for Eero Dashboard using Raspberry Pi data source'
+      MemorySize: 256
+      Environment:
+        Variables:
+          PI_DASHBOARD_IP: '192.168.1.100'  # Default - user will configure this
+          PI_DASHBOARD_PORT: '80'
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+      Events:
+        AlexaSkillEvent:
+          Type: AlexaSkill
+          Properties:
+            SkillId: !Ref AlexaSkillId
+
+  # CloudWatch Log Group
+  SkillLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/eero-dashboard-skill-${Environment}'
+      RetentionInDays: 14
+
+  # CloudWatch Alarms
+  SkillErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'EeroDashboardSkill-Errors-${Environment}'
+      AlarmDescription: 'Alarm for Eero Dashboard skill errors'
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref EeroDashboardSkillFunction
+      AlarmActions:
+        - !Ref SNSAlarmTopic
+
+  SkillDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'EeroDashboardSkill-Duration-${Environment}'
+      AlarmDescription: 'Alarm for Eero Dashboard skill high duration'
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref EeroDashboardSkillFunction
+      AlarmActions:
+        - !Ref SNSAlarmTopic
+
+  # SNS Topic for Alarms
+  SNSAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'eero-dashboard-alarms-${Environment}'
+      DisplayName: 'Eero Dashboard Alarms'
+
+Outputs:
+  SkillFunctionArn:
+    Description: 'ARN of the Alexa Skill Lambda function'
+    Value: !GetAtt EeroDashboardSkillFunction.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-SkillFunctionArn'
+
+  SNSTopicArn:
+    Description: 'ARN of the SNS alarm topic'
+    Value: !Ref SNSAlarmTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-SNSTopicArn'
+
+  PiDashboardConfiguration:
+    Description: 'Instructions for configuring Pi IP address'
+    Value: 'Update the PI_DASHBOARD_IP environment variable in the Lambda function with your Raspberry Pi IP address'
